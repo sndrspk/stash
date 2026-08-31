@@ -503,15 +503,16 @@ article with no network.
 
 ## Open questions
 
-Both prior blockers are cleared: the Instapaper credentials are in hand, and the extraction method
-is specified in [`docs/EXTRACTION.md`](docs/EXTRACTION.md). What remains is one confirmation and one
+All prior blockers are cleared: the Instapaper credentials are in hand, the extraction method is
+specified in [`docs/EXTRACTION.md`](docs/EXTRACTION.md), and xAuth is confirmed. What remains is one
 preference.
 
-1. **xAuth on the consumer key.** Granted per-application and separately from Full API access, and
-   it fails only at the token exchange. The first `npm run connect` run confirms it; if it 401s,
-   that is a request back to Instapaper, not a bug in our signing (assuming the RFC 5849 test vector
-   passes first).
-2. **Is the cookie paste tolerable?** Settled in principle — manual paste first, extension deferred
+> **Resolved 2026-08-31 — xAuth on the consumer key.** `npm run connect` completed and returned a
+> token pair. That single result confirms three things at once: xAuth is enabled on the consumer key,
+> the OAuth 1.0a signing is correct against a real server and not only against the RFC, and the
+> account is reachable. It was the last item on the critical path that was outside our control.
+
+1. **Is the cookie paste tolerable?** Settled in principle — manual paste first, extension deferred
    to 7c — but not yet in practice. Run `npm run probe` against two or three publishers you
    subscribe to and see. If the copy step is fine, 7c stays deferred indefinitely; if it's the thing
    that stops you using Stash, it moves up.
