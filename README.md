@@ -132,10 +132,29 @@ For anything touching `/api`, use `vercel dev` instead of `npm run dev`: it serv
 functions on one origin, the way production does. It needs the Vercel CLI (`npm i -g vercel`) and a
 logged-in account.
 
-There is nothing to connect yet — the token exchange (`npm run connect`) arrives with Phase 2, and
-running your own instance will require Instapaper **Full API** credentials (a consumer key and
-secret, with xAuth enabled), which Instapaper issues on request. `.env.example` documents every
-variable you'll need.
+### Connecting an Instapaper account
+
+Running your own instance requires Instapaper **Full API** credentials — a consumer key and secret,
+with xAuth enabled — which Instapaper issues on request. `.env.example` documents every variable.
+
+```sh
+cp .env.example .env
+npm run connect
+```
+
+`connect` prompts for your Instapaper email and password, exchanges them once for an OAuth token,
+prints it, and exits. The password is never written to disk, never logged, and never reaches the
+deployed app — it exists only inside that one process, on your machine, for the length of one
+request. Paste the two token values it prints into `.env` locally and into your host's environment
+variables in production.
+
+There is deliberately no way to do this from the deployed app. It has no code path that writes
+credentials, which is why there is no credential store to leak.
+
+If `connect` returns 401, the likeliest cause by some distance is that xAuth is not enabled on your
+consumer key. It is granted per application, separately from Full API access, and it fails nowhere
+else. It is almost certainly not the request signing — that is verified against RFC 5849's own
+worked example by `npm test`.
 
 ## Constraints we hold ourselves to
 

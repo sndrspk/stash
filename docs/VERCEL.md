@@ -49,6 +49,26 @@ there is no second origin.
 `npm run dev` runs Vite alone — faster, but functions 404. Use it for UI work, `vercel dev`
 for anything touching `/api`.
 
+## `Secure` cookies and `localhost` vs `127.0.0.1`
+
+The session cookie is always `Secure`. Browsers make an exception that lets a `Secure`
+cookie work over plain HTTP on a trustworthy origin — but that exception is keyed to the
+hostname `localhost`, **not** to the literal IP `127.0.0.1`.
+
+Verified in Chromium against the real handlers:
+
+| Origin | Cookie stored | Cookie sent back | Guarded call |
+| --- | --- | --- | --- |
+| `http://localhost:PORT` | yes | yes | 200 |
+| `http://127.0.0.1:PORT` | yes | **no** | 401 |
+
+The failure is quiet and misleading: unlocking succeeds, the cookie is visibly in the jar,
+and every subsequent request is refused. It looks like a broken session implementation.
+
+`vercel dev` serves on `localhost`, so the normal workflow never hits this. It matters if
+you point a test client, a script, or a second browser tab at `127.0.0.1` instead. Check
+the address bar before the code.
+
 ## Environment variables
 
 Set as Vercel environment variables, never in the client bundle. `.env.example` documents

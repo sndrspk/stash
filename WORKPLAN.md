@@ -202,22 +202,56 @@ alone and 404s every function.
 
 ## Phase 2 — Credentials and the gate
 
-- [ ] `scripts/connect.ts` (`npm run connect`): prompts for email + password, performs the xAuth
+- [x] `scripts/connect.ts` (`npm run connect`): prompts for email + password, performs the xAuth
       exchange against `/api/1/oauth/access_token` with HMAC-SHA1 signing, prints the token/secret
-      as ready-to-paste env lines, stores nothing, logs no password.
-- [ ] `lib/oauth.ts`: OAuth 1.0a request signing, shared by the script and the functions.
-      Signature-base-string construction (percent-encoding, parameter sorting) is where these
-      break — **unit-test it against the RFC 5849 worked example** before pointing it at Instapaper.
-- [ ] `/unlock` screen + `api/unlock`: compares against `STASH_PASSPHRASE` in constant time, sets a
-      signed httpOnly `SameSite=Lax` session cookie. Rate-limit the attempts.
-- [ ] Shared `requireSession()` guard, applied to every function. A missing or bad cookie returns
-      401 before any outbound call.
-- [ ] `.env.example` documenting all five variables; `.env` git-ignored.
-- [ ] `/settings` shows connection status (a cheap authenticated Instapaper call) and explains that
-      reconnecting means re-running the script — there is no in-app credential write path.
+      as ready-to-paste env lines, stores nothing, logs no password. Refuses to run
+      non-interactively, so a password can never arrive down a pipe and into a log.
+- [x] `src/lib/oauth.ts`: OAuth 1.0a request signing, shared by the script and the functions,
+      **tested against the RFC 5849 worked example**. See the note below on what that did and did
+      not turn out to establish.
+- [x] `/unlock` screen + `api/unlock`: constant-time comparison against `STASH_PASSPHRASE`, then a
+      signed httpOnly `Secure` `SameSite=Lax` cookie. Attempts are rate-limited, and the limit is
+      applied *before* the comparison, so exhausting it refuses even a correct passphrase.
+- [x] Shared `requireSession()` guard. It returns a refusal `Response` rather than throwing, so the
+      call site reads `if (refusal) return refusal;` and skipping it is visible in review. A
+      misconfigured deployment answers 503, never 401 — an unset passphrase must never be compared
+      against and must never look like a rejected credential.
+- [x] `.env.example` documents every variable; `.env` is git-ignored. (There are **six**, not the
+      five this line used to claim: consumer key and secret, token and token secret, passphrase,
+      encryption key.)
+- [x] `/settings` shows connection status via `api/status` — the first function behind the guard —
+      and explains that reconnecting means re-running the script. When a variable is missing it
+      names which one; the only reader is the operator, who is already past the gate.
 
 **Done when:** the script yields a working token, an authenticated function call round-trips to
 Instapaper, and an unauthenticated request to any function is refused.
+
+**Status:** the gate is done and verified; the token exchange is built but unrun.
+
+Driven in a real browser against the real handlers: an unauthenticated `/api/status` is refused
+401; a wrong passphrase is refused with no cookie set; the right one issues an httpOnly `SameSite=Lax`
+cookie and the same call then returns 200; signing out returns it to 401. 158 unit tests cover the
+pieces underneath.
+
+Two findings worth keeping:
+
+- **The RFC 5849 example does not give a usable end-to-end signature.** §3.1 prints a request
+  carrying `oauth_signature="bYT5CMsGcbgUdFHObYMEfcx6bsw%3D"` but never states the secrets behind
+  it, and §3.4.2's signing key belongs to a different discussion; pairing them is a guess, and the
+  guess fails. What the RFC *does* give, and what `test/oauth.test.ts` asserts, is the normalized
+  parameter string and the signature base string — which is where OAuth 1.0a implementations
+  actually go wrong. The HMAC step is pinned separately against RFC 2202. Both halves right means
+  the composition is right, and that is what licenses `connect`'s 401 message pointing at xAuth
+  rather than at our signing.
+- **`Secure` cookies and `127.0.0.1`.** The trustworthy-origin exception that lets a `Secure`
+  cookie work over plain HTTP applies to the hostname `localhost`, not to the literal IP. On
+  `http://127.0.0.1` Chromium accepts the cookie and then declines to send it back, so unlocking
+  appears to succeed and every later call 401s. `vercel dev` uses `localhost`, so this is a trap
+  rather than a defect — but it costs an hour if you meet it without knowing.
+
+**Left for the operator, and blocking Phase 2a:** run `npm run connect` once with real credentials.
+That is the only step that can confirm xAuth is enabled on the consumer key — it is granted
+per-application, separately from Full API access, and it fails nowhere else.
 
 ---
 
