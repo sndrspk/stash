@@ -1,0 +1,6 @@
+# Stash publisher sessions — one host per line, then its Cookie: header value.
+# Copy to sessions.txt (git-ignored) or, better, use: npm run session -- add <host>
+# See docs/COOKIE_SETUP.md.
+
+www.ft.com        FTSession=PASTE_THE_COOKIE_HEADER_VALUE_HERE; FTUser=...
+www.nieuwsblad.be nb_session=...; consent=...

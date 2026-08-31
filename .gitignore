@@ -1,0 +1,24 @@
+# Secrets — never commit these
+.env
+.env.*
+!.env.example
+*.pem
+
+# Publisher session cookies. These are credentials for your paid subscriptions.
+sessions.json
+sessions.*.json
+sessions.txt
+!sessions.example.txt
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+.vercel/
+
+# Editor / OS
+.DS_Store
+*.log
+.idea/
+.vscode/
