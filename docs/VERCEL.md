@@ -6,17 +6,37 @@ rejects unknown keys — so the reasoning lives here.
 ## `rewrites`
 
 ```json
-{ "source": "/((?!api/).*)", "destination": "/index.html" }
+{ "source": "/((?!api/)(?!@)(?!.*\\.).*)", "destination": "/index.html" }
 ```
 
 The SPA fallback for client-side routes: `/read/123` has no file behind it, so the shell
 has to answer and let the router take over.
 
-The negative lookahead is the part worth keeping. Without it the fallback also swallows
-`/api/*`, and a mistyped or not-yet-deployed function path returns the app shell with
-`200 OK` instead of a 404 — which surfaces later as a fetch that "succeeded" and then
-failed to parse HTML as JSON. Filesystem routes are matched before rewrites, so working
-functions resolve either way; the lookahead is what makes the _broken_ ones fail honestly.
+Three exclusions, each earning its place.
+
+**`api/`** — without it the fallback also swallows `/api/*`, and a mistyped or
+not-yet-deployed function path returns the app shell with `200 OK` instead of a 404, which
+surfaces much later as a fetch that "succeeded" and then failed to parse HTML as JSON.
+
+**`@` and anything containing a dot** — these exist because of `vercel dev`, and their
+absence broke local development outright.
+
+In production, rewrites are applied *after* the filesystem check, so real assets win and a
+greedy pattern is mostly harmless. `vercel dev` is different: it applies rewrites **before**
+proxying to the Vite dev server, whose module graph is served from memory and never touches
+disk. A pattern of `/((?!api/).*)` therefore rewrote `/src/main.tsx` and `/@vite/client` to
+`/index.html`, Vite was handed HTML where it expected a module, and the dev server failed
+with `Failed to parse source for import analysis` pointing at `<title>Stash</title>` — an
+error that says nothing whatsoever about routing.
+
+The rule that satisfies both environments: **a client route has no file extension and does
+not begin with `@`.** Every built asset (`/assets/index-abc.js`, `/sw.js`,
+`/fonts/x.woff2`), every dev module (`/src/main.tsx`), and every Vite internal
+(`/@vite/client`, `/@react-refresh`) has one or the other. Routes like `/settings` and
+`/read/12345` have neither.
+
+`test/api-health.test.ts` asserts all four groups, so a future edit that reintroduces
+either failure mode fails in CI rather than the next time someone runs `vercel dev`.
 
 ## `headers`
 
