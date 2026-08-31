@@ -45,21 +45,26 @@ improvement on the Android app, where the store was per-install.
 
 ## Storing it
 
-Don't hand-edit a file. Pipe the header in:
+Don't hand-edit a file — hand the header to the CLI:
 
 ```bash
-# macOS, straight from the clipboard
-pbpaste | npm run session -- add www.ft.com
-
-# Linux
-xclip -o -selection clipboard | npm run session -- add www.ft.com
-
-# anywhere: run it, paste, then press Ctrl-D
+# paste at the prompt, then press Enter
 npm run session -- add www.ft.com
+
+# or straight from the clipboard
+pbpaste | npm run session -- add www.ft.com                 # macOS
+xclip -o -selection clipboard | npm run session -- add www.ft.com   # Linux
+
+# or from a file, if pasting a very long header is awkward
+npm run session -- add www.ft.com --from header.txt
 ```
 
-Reading from stdin keeps the header out of your shell history. Nothing is echoed back but the
-cookie **names**:
+The header is never taken as an argument, so it stays out of your shell history. The
+interactive prompt ends at **Enter** — no Ctrl-D. (Ctrl-D only signals end-of-input at the
+start of an empty line, so after pasting a header with no trailing newline it does nothing
+visible and the command looks hung. Reading a single line avoids the trap entirely.)
+
+Nothing is echoed back but the cookie **names**:
 
 ```
 Stored 4 cookies for www.ft.com in sessions.txt.

@@ -6,15 +6,18 @@
  *   npm run session -- list            hosts and cookie names — never values
  *   npm run session -- remove <host>   forget one host
  *
- * `add` reads stdin, so the header never lands in your shell history:
+ * `add` never takes the header as an argument, so it stays out of your shell history:
  *
- *   pbpaste | npm run session -- add www.ft.com        # macOS
- *   npm run session -- add www.ft.com                  # then paste, then Ctrl-D
+ *   npm run session -- add www.ft.com                  # paste at the prompt, press Enter
+ *   pbpaste | npm run session -- add www.ft.com        # macOS, from the clipboard
+ *   npm run session -- add www.ft.com --from head.txt  # from a file
  *
  * This is the local stand-in for the settings screen in Phase 7b. Same rules: values go
  * in, only names come out.
  */
 
+import { readFile } from 'node:fs/promises';
+import { createInterface } from 'node:readline/promises';
 import { coerceHost, cookieNames, mergeCookieHeaders, parseCookieInput, serializeCookies } from '../src/lib/cookies.js';
 import { DEFAULT_STORE_PATHS, loadSessionStore, saveSessionStore, SessionStoreError } from '../src/lib/session-store.js';
 
@@ -31,23 +34,43 @@ const USAGE = `usage:
   npm run session -- remove <host>    forget one host
 
 options:
+  --from <path>   read the header from a file instead of the terminal
   --file <path>   store to use (default: ${DEFAULT_STORE_PATHS[0]}, falling back to ${DEFAULT_STORE_PATHS[1]})`;
 
-async function readStdin(): Promise<string> {
-  if (process.stdin.isTTY === true) {
-    console.error(`${DIM}Paste the Cookie: header value, then press Ctrl-D.${OFF}`);
+/**
+ * Read the header.
+ *
+ * Interactively this takes a single line and ends at Enter. The obvious implementation —
+ * read stdin to EOF — requires Ctrl-D, and Ctrl-D only signals EOF at the start of an
+ * empty line: after pasting a header with no trailing newline it flushes the buffer and
+ * the program keeps waiting, looking hung. A cookie header is one line, so read one line.
+ *
+ * Piped input is still read to EOF, since there is no terminal to end a line.
+ */
+async function readHeader(): Promise<string> {
+  if (process.stdin.isTTY !== true) {
+    const chunks: Buffer[] = [];
+    for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk));
+    return Buffer.concat(chunks).toString('utf8');
   }
-  const chunks: Buffer[] = [];
-  for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk));
-  return Buffer.concat(chunks).toString('utf8');
+
+  // Prompt on stderr so stdout stays clean if the caller is capturing it.
+  const rl = createInterface({ input: process.stdin, output: process.stderr });
+  try {
+    return await rl.question(`${DIM}Paste the Cookie: header value, then press Enter.${OFF}\n`);
+  } finally {
+    rl.close();
+  }
 }
 
 async function main(): Promise<number> {
   const argv = process.argv.slice(2);
   let file: string | null = null;
+  let from: string | null = null;
   const positional: string[] = [];
   for (let i = 0; i < argv.length; i += 1) {
     if (argv[i] === '--file') file = argv[++i] ?? null;
+    else if (argv[i] === '--from') from = argv[++i] ?? null;
     else if (argv[i] !== undefined) positional.push(argv[i] as string);
   }
 
@@ -110,16 +133,24 @@ async function main(): Promise<number> {
     return 2;
   }
 
-  const pasted = await readStdin();
+  const pasted = from !== null ? await readFile(from, 'utf8') : await readHeader();
   const parsed = parseCookieInput(pasted);
 
   if (parsed.format === 'empty') {
-    console.error(`${RED}Nothing arrived on stdin.${OFF}`);
+    console.error(`${RED}Nothing to store — the input was empty.${OFF}`);
     console.error('');
-    console.error('If you piped from the clipboard, it no longer holds the cookie header —');
-    console.error('copying anything else since replaces it. Re-copy it, or paste directly:');
-    console.error('');
-    console.error(`  ${BOLD}npm run session -- add ${host}${OFF}   then paste, then press Ctrl-D`);
+    if (from !== null) {
+      console.error(`${from} is empty.`);
+    } else if (process.stdin.isTTY === true) {
+      console.error('Nothing was pasted. Some terminals need a moment for a long paste —');
+      console.error('wait until the whole header appears, then press Enter.');
+    } else {
+      console.error('If you piped from the clipboard, it no longer holds the cookie header —');
+      console.error('copying anything else since replaces it. Try one of these instead:');
+      console.error('');
+      console.error(`  ${BOLD}npm run session -- add ${host}${OFF}                 paste at the prompt, press Enter`);
+      console.error(`  ${BOLD}npm run session -- add ${host} --from head.txt${OFF}  from a file`);
+    }
     console.error('');
     console.error(`${DIM}Where to find the header: docs/COOKIE_SETUP.md${OFF}`);
     return 1;
