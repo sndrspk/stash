@@ -153,10 +153,6 @@ www.nieuwsblad.be nb_session=abc; consent=1; cf_clearance=...
 www.ft.com        FTSession=def; FTUser=ghi
 ```
 
-It is git-ignored, and you should keep it that way: **these are live credentials for your accounts.**
-Anyone with this file can read as you. Right now it is plain text on your own machine; when Stash
-itself is built, the same data lives encrypted server-side and never reaches the browser.
-
 Managing what's there:
 
 ```bash
@@ -165,6 +161,60 @@ npm run session -- remove www.nieuwsblad.be  # forget one publisher
 ```
 
 You can edit `sessions.txt` by hand — host, a space, the header — but there's rarely a reason to.
+
+**Treat this file as you would a password file.** These are live credentials: anyone who has it can
+read as you at those publishers. It is git-ignored, and while Stash is only a probe it sits in plain
+text on your own machine. If that bothers you, remove a session when you are done testing with it.
+
+### No, it is not in the public repo
+
+The repository contains code. Your data is not in it and cannot be:
+
+| | Where it lives | In GitHub? |
+| --- | --- | --- |
+| Publisher session cookies | `sessions.txt`, then the KV store below | **No** — git-ignored, then server-side |
+| Instapaper token, passphrase, encryption key | environment variables on your deployment | **No** |
+
+Someone who forks this repo gets the code and nothing of yours. That is the ordinary shape for an
+open-source app: public code, private configuration. You can confirm it yourself —
+`git check-ignore -v sessions.txt` will name the rule that hides it, and `git status` never offers
+to commit it.
+
+### Where they live once Stash is deployed
+
+In a **key-value store** attached to your own deployment.
+
+A key-value store — "KV" — is a very small database that is really just a dictionary: you give it a
+key, it gives you back a value. No tables, no schema, no SQL. What it holds is exactly this:
+
+```
+"www.ft.com"        →  "FTSession=abc; FTUser=def"
+"www.nieuwsblad.be" →  "nb_session=...; consent=1"
+```
+
+Which is to say: **`sessions.txt`, but hosted.** Same shape, same contents, somewhere your deployed
+app can reach it. In practice that is Vercel KV or Cloudflare KV depending on where you deploy; both
+have free tiers vastly larger than a few dozen cookie strings need.
+
+It is not Postgres or Supabase on purpose. There is one user and one access pattern — *give me the
+cookies for this host*. A relational database would be a two-column table that is never joined,
+sorted or queried: a dictionary with extra steps and a schema to maintain. But it cannot be an
+environment variable either, the way the Instapaper token is, because sessions get added and
+replaced while the app is running. A KV store is the smallest thing that does the job.
+
+There, the values are encrypted under `STASH_ENCRYPTION_KEY` before being written, so the hosting
+provider stores ciphertext, and they are never sent to the browser — the page asks your deployment
+for an article, and the server-side function attaches the cookies.
+
+### One session per publisher, not per device
+
+Because that store lives with your deployment rather than on a device, **you do this once per
+publisher and every device benefits.** Add a session from whichever desktop is handy and your phone,
+tablet and other laptops all get full articles from then on.
+
+You still need a desktop to *capture* a session, since iOS Safari has no usable developer tools. But
+that is once per publisher, not once per publisher per device — which is better than the Android app
+this method came from, where the store was per-install.
 
 ---
 

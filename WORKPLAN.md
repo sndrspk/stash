@@ -37,7 +37,9 @@ it:
 One thing does need server-side persistence: the per-publisher session cookies the extraction
 fallback replays (see [`docs/EXTRACTION.md`](docs/EXTRACTION.md)). They are bearer credentials, so
 they must never reach the browser, and they change at runtime, so env vars can't hold them. That is
-a KV namespace, not a database — and it is worth one, rather than dragging auth back in.
+a key-value store — a hosted dictionary of host → cookie header, no tables or schema — rather than a
+database, and it is worth one instead of dragging auth back in.
+[`SESSIONS.md`](SESSIONS.md#where-they-live-once-stash-is-deployed) explains it in plain terms.
 
 ### Where each piece of data lives
 
