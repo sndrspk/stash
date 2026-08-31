@@ -1,0 +1,4 @@
+{
+  "www.ft.com": "FTSession=PASTE_THE_COOKIE_HEADER_VALUE_HERE; FTUser=...",
+  "www.nytimes.com": "NYT-S=...; nyt-auth-method=..."
+}

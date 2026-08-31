@@ -10,8 +10,29 @@ not affiliated with or endorsed by Instapaper.
 own instance, connect it to your own Instapaper account, and it serves exactly you. If you want to
 use it, fork or clone this repo and deploy it yourself.
 
-> **Status: pre-implementation.** This repository currently contains the design spec and the
-> work plan only. No application code has been written yet.
+> **Status: early.** The spec and work plan are complete; the first piece of real code is the
+> extraction probe (below). The PWA itself has not been started.
+
+## Try the extraction probe
+
+Before any of the app exists, you can answer the question it hinges on: does replaying a publisher
+session actually get you the full article?
+
+```bash
+npm install
+npm run probe -- https://www.example.com/some-paywalled-article
+```
+
+With a session stored for that host it fetches twice — anonymously and authenticated — and reports
+what each attempt got:
+
+```
+  anonymous         HTTP 200  raw   412 KB  extracted      847 chars  looks truncated
+  with session      HTTP 200  raw   448 KB  extracted   18,455 chars  looks complete
+```
+
+[`docs/COOKIE_SETUP.md`](docs/COOKIE_SETUP.md) covers where to get the cookie header.
+`--file <path>` runs the same pipeline over a saved HTML file, with no network.
 
 ## What it does
 
@@ -68,14 +89,20 @@ rather use Cloudflare or Netlify.
 ## Repository layout
 
 ```
+src/lib/              Extraction core — cookies, truncation, fetch guard, extract
+scripts/probe.ts      CLI: does a session change what this publisher serves?
+test/                 Unit tests, adversarial where it matters
+fixtures/             Saved pages for offline testing
 docs/DESIGN_SPEC.md   Product + technical spec (source of truth)
 docs/EXTRACTION.md    Full-text extraction, ported from the SanFeedBin method
+docs/COOKIE_SETUP.md  How to give Stash a publisher session
 WORKPLAN.md           Phased implementation plan, decisions, open questions, risks
 .env.example          Every environment variable, documented
-LICENSE               MIT
 ```
 
-Application code, functions and tooling land as the phases in `WORKPLAN.md` are completed.
+The PWA, its serverless functions and the rest of the tooling land as the phases in `WORKPLAN.md`
+are completed. What's in `src/lib` today is Phase 7a code, written early because it answers the
+riskiest product question first.
 
 ## Getting started
 

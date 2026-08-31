@@ -288,17 +288,25 @@ source of "works on desktop, broken on my phone".
 Full detail in [`docs/EXTRACTION.md`](docs/EXTRACTION.md). Build it in that document's own staged
 order — each stage is independently useful, which is what made it tractable on Android.
 
+**Built ahead of the phases it belongs to**, because it answers the riskiest product question — is
+the manual cookie paste worth doing? — before anything depends on the answer. `npm run probe`
+fetches an article anonymously and authenticated and reports the difference. See
+[`docs/COOKIE_SETUP.md`](docs/COOKIE_SETUP.md).
+
 ### 7a — Unauthenticated extraction
 
-- [ ] `lib/truncation.ts`: the heuristic, pure and side-effect-free — under ~1500 characters, or a
-      short sentinel list ("read more", "continue reading"), `[…]` only when it ends the text. Unit
-      tests, no I/O.
-- [ ] `api/extract`: credential-free fetch (honest `Stash/1.0 (+repo)` User-Agent, redirects on,
-      10s connect / 15s read, serial with ~250ms delay) → `@mozilla/readability` → HTML fragment.
-      **Reuse Phase 4's SSRF guard** — same arbitrary-URL exposure, same rules.
-- [ ] One result type out. Non-2xx, empty body and empty Readability output are ordinary failures.
-      Record a stable tag capped at 80 chars ("HTTP 403", "Readability returned empty"), never a
-      stack trace.
+- [x] `src/lib/truncation.ts`: the heuristic, pure and side-effect-free — under 1500 characters, or
+      a short sentinel list ("read more", "continue reading"), `[…]` only when it ends the text.
+- [x] `src/lib/fetch-guard.ts`: the SSRF guard, with every redirect hop re-validated. Shared with
+      Phase 4's image resolver — same arbitrary-URL exposure, same rules.
+- [x] `src/lib/extract.ts`: credential-free fetch (honest `Stash/0.1 (+repo)` User-Agent, redirects
+      followed manually, 25s deadline) → `@mozilla/readability` → HTML fragment. One result type
+      out; non-2xx, empty body and empty Readability output are ordinary failures with a stable tag
+      capped at 80 chars.
+- [x] `scripts/probe.ts`: the CLI, including `--file` for reducing a saved page with no network.
+- [ ] **Verify against live sites.** The fetch path is unexercised — this container's network policy
+      blocks arbitrary outbound hosts, so only the offline pipeline has been run end to end. First
+      task on a machine with real network access.
 - [ ] The four cleaners as separate pure functions over the fragment (`linkedom`): duplicate title,
       missing intro, page furniture, hero image. Furniture removal runs **at render time**, so a new
       rule fixes already-cached articles without a re-sync.
@@ -313,11 +321,17 @@ hard-paywalled one fails with a legible tag rather than an exception.
 
 ### 7b — Manual site sessions
 
+- [x] `src/lib/cookies.ts`: RFC 6265 matching — `U == H` or `U` ends with `.H` — plus header
+      parsing, last-wins merge, and a names-only accessor for anything user-facing. Tested
+      adversarially before it had a caller: spoofed suffixes, substring hosts, leading dots, case,
+      values containing `=`, IP literals, single-label hosts. That suite caught a real bug on first
+      run (a saved `168.1.1` dot-suffix-matching the host `192.168.1.1`), which is the argument for
+      writing it first.
+- [x] Cookies are dropped on a cross-host redirect rather than forwarded — a session must never
+      follow a bounce to a third party.
 - [ ] KV binding + `lib/secrets.ts`: AES-GCM under `STASH_ENCRYPTION_KEY`, corrupt-blob recovery
       deletes and recreates rather than crashing. **Separate namespace from anything Instapaper.**
-- [ ] `lib/cookie-domain.ts`: RFC 6265 matching — `U == H` or `U` ends with `.H`. **Unit-test this
-      hard** before it has any consumer: spoofed suffixes (`fakenytimes.com` vs `nytimes.com`),
-      leading dots, case, values containing `=`. A bare `endsWith` here is a vulnerability.
+      (The probe reads a git-ignored `sessions.json` in the meantime — same shape, no encryption.)
 - [ ] `api/sessions`: POST a host + `Cookie:` header value, DELETE one host, GET the host list.
       Only `name=value` pairs are stored; everything else is dropped. **The cookie values are never
       returned to the client** — GET lists hosts and nothing more.
@@ -377,10 +391,10 @@ preference.
    it fails only at the token exchange. The first `npm run connect` run confirms it; if it 401s,
    that is a request back to Instapaper, not a bug in our signing (assuming the RFC 5849 test vector
    passes first).
-2. **How far to take the cookie capture.** The plan builds 7a and 7b and defers the extension. If
-   pasting a `Cookie:` header per publisher sounds like something you'd never actually do, say so
-   and the extension moves up — it's the difference between the feature being used and being
-   theoretically present.
+2. **Is the cookie paste tolerable?** Settled in principle — manual paste first, extension deferred
+   to 7c — but not yet in practice. Run `npm run probe` against two or three publishers you
+   subscribe to and see. If the copy step is fine, 7c stays deferred indefinitely; if it's the thing
+   that stops you using Stash, it moves up.
 
 ## Risks
 
