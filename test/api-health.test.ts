@@ -25,8 +25,20 @@ describe('api/health', () => {
 
 /*
  * The SPA rewrite is a regex in vercel.json that nothing else would catch if it
- * regressed — a wrong pattern returns the app shell with 200 for a broken function
- * path, which surfaces much later as "JSON.parse got <!doctype html>".
+ * regressed, and it has two distinct failure modes.
+ *
+ * Too greedy and it swallows things that are not client routes. In production that
+ * is mostly hidden, because Vercel checks the filesystem before applying rewrites —
+ * but `vercel dev` applies them *before* proxying to the Vite dev server, where the
+ * module graph is served from memory rather than disk. An earlier version of this
+ * pattern rewrote `/src/main.tsx` and `/@vite/client` to `/index.html`, so Vite was
+ * handed HTML and tried to parse it as JavaScript. Local development simply did not
+ * start.
+ *
+ * Too narrow and deep links 404 instead of reaching the router.
+ *
+ * The rule that satisfies both: a client route has no file extension and does not
+ * begin with `@`. Every asset and every dev-server module has one or the other.
  */
 describe('vercel.json SPA rewrite', () => {
   const config = JSON.parse(readFileSync(new URL('../vercel.json', import.meta.url), 'utf8')) as {
@@ -47,7 +59,36 @@ describe('vercel.json SPA rewrite', () => {
   });
 
   it('does not swallow function paths', () => {
-    for (const path of ['/api/health', '/api/bookmarks', '/api/does-not-exist']) {
+    for (const path of ['/api/health', '/api/unlock', '/api/status', '/api/does-not-exist']) {
+      expect(matches(path), path).toBe(false);
+    }
+  });
+
+  it('does not swallow Vite dev-server module requests', () => {
+    // The regression that broke `vercel dev`. These are served from the dev
+    // server's memory, so no filesystem check protects them.
+    for (const path of [
+      '/src/main.tsx',
+      '/src/routes/Unlock.tsx',
+      '/@vite/client',
+      '/@react-refresh',
+      '/node_modules/.vite/deps/react.js',
+      '/src/styles/theme.css',
+    ]) {
+      expect(matches(path), path).toBe(false);
+    }
+  });
+
+  it('does not swallow built assets', () => {
+    for (const path of [
+      '/assets/index-DklecbVi.js',
+      '/assets/index-abc123.css',
+      '/fonts/geist-latin.woff2',
+      '/icons/icon-512.png',
+      '/manifest.webmanifest',
+      '/sw.js',
+      '/registerSW.js',
+    ]) {
       expect(matches(path), path).toBe(false);
     }
   });
