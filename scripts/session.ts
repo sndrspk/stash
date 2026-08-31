@@ -15,7 +15,7 @@
  * in, only names come out.
  */
 
-import { coerceHost, cookieNames, mergeCookieHeaders, parseCookieHeader } from '../src/lib/cookies.js';
+import { coerceHost, cookieNames, mergeCookieHeaders, parseCookieInput, serializeCookies } from '../src/lib/cookies.js';
 import { DEFAULT_STORE_PATHS, loadSessionStore, saveSessionStore, SessionStoreError } from '../src/lib/session-store.js';
 
 const BOLD = '[1m';
@@ -111,18 +111,41 @@ async function main(): Promise<number> {
   }
 
   const pasted = await readStdin();
-  const parsed = parseCookieHeader(pasted);
-  if (parsed.size === 0) {
-    console.error(`${RED}That doesn't look like a Cookie: header — no name=value pairs found.${OFF}`);
-    console.error(`${DIM}Copy the value of the "cookie" REQUEST header, not the cookie storage panel.${OFF}`);
+  const parsed = parseCookieInput(pasted);
+
+  if (parsed.format === 'empty') {
+    console.error(`${RED}Nothing arrived on stdin.${OFF}`);
+    console.error('');
+    console.error('If you piped from the clipboard, it no longer holds the cookie header —');
+    console.error('copying anything else since replaces it. Re-copy it, or paste directly:');
+    console.error('');
+    console.error(`  ${BOLD}npm run session -- add ${host}${OFF}   then paste, then press Ctrl-D`);
+    console.error('');
+    console.error(`${DIM}Where to find the header: docs/COOKIE_SETUP.md${OFF}`);
+    return 1;
+  }
+
+  if (parsed.format === 'unrecognised') {
+    console.error(`${RED}That doesn't look like a Cookie: header${OFF} — stdin held ${parsed.hint}.`);
+    console.error('');
+    console.error('You want the value of the "cookie" REQUEST header:');
+    console.error(`  DevTools → ${BOLD}Network${OFF} → reload → click the first (document) request`);
+    console.error(`  → Headers → Request Headers → right-click ${BOLD}cookie${OFF} → Copy value`);
+    console.error('');
+    console.error(`${DIM}Not the Application → Cookies panel, though a paste from there also works.${OFF}`);
     console.error(`${DIM}See docs/COOKIE_SETUP.md.${OFF}`);
     return 1;
+  }
+
+  if (parsed.format === 'table') {
+    console.error(`${YELLOW}That looks like a pasted cookie table rather than a header — reading it anyway.${OFF}`);
+    console.error('');
   }
 
   // Merging rather than replacing: a partial paste must not silently drop cookies that
   // were already there.
   const existing = store[host] ?? '';
-  store[host] = mergeCookieHeaders(existing, pasted);
+  store[host] = mergeCookieHeaders(existing, serializeCookies(parsed.cookies));
 
   await saveSessionStore(store, target);
   const names = cookieNames(store[host] ?? '');

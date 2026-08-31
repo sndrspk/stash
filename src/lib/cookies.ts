@@ -124,10 +124,70 @@ export function parseCookieHeader(raw: string): Map<string, string> {
     if (eq <= 0) continue; // no name, or no `=` at all
     const name = chunk.slice(0, eq).trim();
     const value = chunk.slice(eq + 1).trim();
-    if (name === '') continue;
+    // A cookie name cannot contain whitespace (RFC 6265 §4.1.1). Enforcing that keeps a
+    // tab-separated table paste from being misread as one malformed cookie.
+    if (name === '' || /\s/.test(name)) continue;
     out.set(name, value); // last wins, matching the store's merge rule
   }
   return out;
+}
+
+/**
+ * The DevTools *cookie table* — Application → Cookies, select rows, copy — which is the
+ * thing people reach for first, and which is tab-separated `name value domain …`.
+ *
+ * Not the documented path, but recovering from it costs ten lines and saves a dead end.
+ */
+export function parseCookieTable(raw: string): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const line of raw.split(/\r?\n/)) {
+    if (!line.includes('\t')) continue;
+    const fields = line.split('\t');
+    const name = (fields[0] ?? '').trim();
+    const value = (fields[1] ?? '').trim();
+    if (name === '' || /\s/.test(name)) continue;
+    if (name.toLowerCase() === 'name') continue; // the table's own header row
+    out.set(name, value);
+  }
+  return out;
+}
+
+export type CookieInputFormat = 'header' | 'table' | 'empty' | 'unrecognised';
+
+export interface ParsedCookieInput {
+  cookies: Map<string, string>;
+  format: CookieInputFormat;
+  /** A safe description of what arrived. Never includes a cookie value. */
+  hint: string;
+}
+
+/**
+ * Parse whatever someone actually pasted, and say what it was — so a wrong paste can be
+ * diagnosed instead of merely refused.
+ */
+export function parseCookieInput(raw: string): ParsedCookieInput {
+  const trimmed = raw.trim();
+  if (trimmed === '') {
+    return { cookies: new Map(), format: 'empty', hint: 'nothing arrived on stdin' };
+  }
+
+  const header = parseCookieHeader(raw);
+  if (header.size > 0) {
+    return { cookies: header, format: 'header', hint: `${header.size} cookies` };
+  }
+
+  const table = parseCookieTable(raw);
+  if (table.size > 0) {
+    return { cookies: table, format: 'table', hint: `${table.size} cookies from a pasted cookie table` };
+  }
+
+  // Nothing usable. Describe the shape without echoing anything that might be a secret.
+  const chars = trimmed.length;
+  let shape = `${chars} characters with no name=value pairs`;
+  if (/^https?:\/\//i.test(trimmed)) shape = 'a URL';
+  else if (trimmed.startsWith('{') || trimmed.startsWith('[')) shape = 'JSON';
+  else if (!trimmed.includes('=')) shape = `${chars} characters containing no "=" at all`;
+  return { cookies: new Map(), format: 'unrecognised', hint: shape };
 }
 
 /** Render name → value pairs back into a `Cookie:` header value. */

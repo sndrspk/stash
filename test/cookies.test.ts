@@ -6,6 +6,7 @@ import {
   mergeCookieHeaders,
   normalizeHost,
   parseCookieHeader,
+  parseCookieInput,
   serializeCookies,
 } from '../src/lib/cookies.js';
 
@@ -148,5 +149,46 @@ describe('cookieNames', () => {
 describe('normalizeHost', () => {
   it('lowercases and strips surrounding dots and whitespace', () => {
     expect(normalizeHost('  .Example.COM. ')).toBe('example.com');
+  });
+});
+
+describe('parseCookieInput', () => {
+  it('recognises a real header', () => {
+    const result = parseCookieInput('Cookie: a=1; b=2');
+    expect(result.format).toBe('header');
+    expect([...result.cookies.keys()]).toEqual(['a', 'b']);
+  });
+
+  it('reports empty stdin as its own case', () => {
+    expect(parseCookieInput('').format).toBe('empty');
+    expect(parseCookieInput('   \n ').format).toBe('empty');
+  });
+
+  // The paste people reach for first: DevTools → Application → Cookies → copy rows.
+  it('recovers a tab-separated cookie table', () => {
+    const table = ['name\tvalue\tdomain\tpath', 'sessionid\tabc123\t.ft.com\t/', 'uid\t42\t.ft.com\t/'].join('\n');
+    const result = parseCookieInput(table);
+    expect(result.format).toBe('table');
+    expect(result.cookies.get('sessionid')).toBe('abc123');
+    expect(result.cookies.get('uid')).toBe('42');
+    expect(result.cookies.has('name')).toBe(false); // the table's header row
+  });
+
+  it('does not mistake a table row containing = for one malformed cookie', () => {
+    const result = parseCookieInput('sessionid\tabc=def\t.ft.com\t/');
+    expect(result.format).toBe('table');
+    expect(result.cookies.get('sessionid')).toBe('abc=def');
+  });
+
+  it('names the shape of an unusable paste without echoing it', () => {
+    expect(parseCookieInput('https://www.ft.com/x').hint).toBe('a URL');
+    expect(parseCookieInput('{"a":1}').hint).toBe('JSON');
+    expect(parseCookieInput('just some prose here').hint).toMatch(/no "=" at all/);
+  });
+
+  it('never puts a cookie value in the hint', () => {
+    const result = parseCookieInput('supersecretvalue with no pairs');
+    expect(result.format).toBe('unrecognised');
+    expect(result.hint).not.toContain('supersecret');
   });
 });
