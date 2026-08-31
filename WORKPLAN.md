@@ -138,13 +138,21 @@ near-identical to Vercel. Nothing outside Phase 1 and Phase 8 depends on the cho
       absence only shows up at the token exchange.
 - [x] SanFeedBin extraction method obtained and ported to a spec —
       [`docs/EXTRACTION.md`](docs/EXTRACTION.md).
-- [ ] Capture a fixture set: ~20 real bookmark records and 5–6 `get_text` HTML payloads (one short,
-      one very long, one image-heavy, one with wide embeds/tables, one soft-paywalled where
-      `get_text` returns a stub, one hard-paywalled where nothing will help) in `fixtures/`, so the
-      front page, reading view and extraction fallback can be built and tested without live API
-      access.
 
-**Done when:** fixtures committed.
+**Done when:** the credentials are in hand and the extraction method is specified. Both are.
+
+> **The fixture capture used to live here, and has moved to [Phase 2a](#phase-2a--fixture-capture).**
+> It asked for *real* bookmark records and *real* `get_text` payloads, which take an authenticated
+> Instapaper call, which takes the OAuth token, which `npm run connect` produces — a Phase 2
+> deliverable. As written, Phase 0 could not be finished until Phase 2 was, while Phases 1 and 2
+> were meant to be built behind it. Capturing it right after the token exists costs nothing and
+> makes the ordering honest; nothing in Phase 1 or Phase 2 needs fixtures.
+>
+> `fixtures/` is not empty in the meantime. It holds two synthetic pages,
+> `soft-paywall-stub.html` and `soft-paywall-full.html`, written as test doubles for
+> `src/lib/truncation.ts`. They are source-site HTML for the extraction path, not `get_text`
+> payloads, and they are invented rather than captured — useful for the unit tests they were
+> written for, and not a substitute for the set below.
 
 ---
 
@@ -183,6 +191,30 @@ serves it with a stub function responding, and CI is green.
 
 **Done when:** the script yields a working token, an authenticated function call round-trips to
 Instapaper, and an unauthenticated request to any function is refused.
+
+---
+
+## Phase 2a — Fixture capture
+
+Moved out of Phase 0: this is the first point in the plan where a live authenticated call is
+possible. Do it immediately after Phase 2, before Phase 3 — everything from the data layer onward is
+easier to build and much easier to test against real payloads than against invented ones.
+
+- [ ] `scripts/capture.ts` (`npm run capture`): with the Phase 2 credentials in `.env`, pull ~20
+      bookmark records from `bookmarks/list` and write them to `fixtures/bookmarks.json`.
+- [ ] Capture 5–6 `get_text` HTML payloads into `fixtures/text/`, covering the shapes that break
+      things downstream: one short, one very long, one image-heavy, one with wide embeds/tables, one
+      soft-paywalled where `get_text` returns a stub, one hard-paywalled where nothing will help.
+      The last two are what Phase 7's gating is tested against.
+- [ ] **Scrub before committing.** These come from a real account and land in a public repo. Strip
+      or replace anything account-identifying, and check the payloads for tokens or personal data in
+      URLs and query strings. Never commit a fixture you have not read.
+- [ ] Record which shape each file covers, so a later reader knows why each one is there and what
+      breaks if it goes.
+
+**Done when:** `fixtures/` holds the bookmark records and the six text shapes, scrubbed and
+documented, and the truncation tests run against the real stub payload rather than only the
+synthetic one.
 
 ---
 
