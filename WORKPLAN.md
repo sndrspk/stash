@@ -179,15 +179,24 @@ near-identical to Vercel. Nothing outside Phase 1 and Phase 8 depends on the cho
 **Done when:** `npm run build` produces an installable PWA that loads an empty shell, `vercel dev`
 serves it with a stub function responding, and CI is green.
 
-**Status:** the build is verified — all five routes render in light and dark in a real browser,
-with the self-hosted font loading and no console or request errors, and the full CI sequence passes
-from a clean `npm ci`.
+**Done.** All five routes render in light and dark in a real browser, with the self-hosted font
+loading and no console or request errors; the full CI sequence passes from a clean `npm ci`; and
+`vercel dev` was run on macOS against Node 20.20.2, with `curl localhost:3000/api/health` returning
+`{"ok":true}`. That last one confirms the app and the serverless layer really do come up together
+on one origin, which is the whole reason the plan chose a host that serves both.
 
-`vercel dev` is **not** verified: it requires a logged-in Vercel account, which is the operator's
-to hold. Run it once locally to close this out — `npm i -g vercel`, then `vercel dev`, then
-`curl localhost:3000/api/health` should return `{"ok":true}`. Nothing in Phase 2 is blocked on it,
-but it is the first thing to check when a function misbehaves, because it is the only local setup
-that matches production's single origin.
+Two things that first run turned up, both fixed:
+
+- **`engines` was looser than reality.** It said `>=20`, while Vite and ESLint need `^20.19.0`.
+  Someone on Node 20.5 would have installed cleanly and then hit failures with no obvious cause.
+  It now names the true floor.
+- **`vercel dev` wants a `build` script before it will start**, even though it never runs one —
+  it validates the build settings while linking the project. Not a problem now that Phase 1 has
+  landed, but it is why the very first attempt failed against a pre-Phase-1 checkout, and worth
+  knowing before blaming `vercel.json`.
+
+`vercel dev` remains the right tool for anything touching `/api`: `npm run dev` serves the app
+alone and 404s every function.
 
 ---
 

@@ -6,7 +6,7 @@
   "description": "A read-it-later PWA for Instapaper with a newspaper-style front page",
   "license": "MIT",
   "engines": {
-    "node": ">=20"
+    "node": "^20.19.0 || ^22.13.0 || >=24"
   },
   "scripts": {
     "dev": "vite",
