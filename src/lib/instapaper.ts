@@ -9,7 +9,7 @@
  * Both are normalised into one thrown `InstapaperError` so callers do not have to
  * remember which is which.
  */
-import { signRequest, type Param } from './oauth';
+import { signRequest, type Param } from './oauth.js';
 
 export const INSTAPAPER_BASE = 'https://www.instapaper.com';
 
