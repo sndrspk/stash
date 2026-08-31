@@ -196,22 +196,40 @@ describe('signRequest', () => {
   });
 
   it('signs body parameters but keeps them out of the header', () => {
+    // The xAuth case, and the one this module got wrong once. The x_auth_*
+    // parameters must be signed and sent in the body; putting them in the
+    // Authorization header instead makes Instapaper answer 400, because the
+    // credentials never reach where it reads them.
     const { header, baseString } = signRequest({
       ...base,
-      extra: [
+      body: [
         ['x_auth_mode', 'client_auth'],
         ['x_auth_username', 'reader@example.com'],
       ],
     });
-    expect(baseString).toContain('x_auth_mode');
-    // x_auth_* are protocol parameters and do belong in the header.
-    expect(header).toContain('x_auth_mode="client_auth"');
+    expect(baseString).toContain('x_auth_mode%3Dclient_auth');
+    expect(baseString).toContain('x_auth_username');
+    expect(header).not.toContain('x_auth_mode');
+    expect(header).not.toContain('x_auth_username');
   });
 
-  it('quotes and encodes every header parameter', () => {
-    const { header } = signRequest({ ...base, extra: [['x_auth_username', 'a b@c.com']] });
+  it('puts nothing but oauth_* in the header', () => {
+    const { header } = signRequest({
+      ...base,
+      body: [['x_auth_password', 'hunter2']],
+    });
     expect(header.startsWith('OAuth ')).toBe(true);
-    expect(header).toContain('x_auth_username="a%20b%40c.com"');
+    // A password in the header would also mean a password in any proxy log that
+    // records headers. It belongs in the body and nowhere else.
+    expect(header).not.toContain('hunter2');
+    for (const pair of header.slice('OAuth '.length).split(', ')) {
+      expect(pair.startsWith('oauth_'), `unexpected header parameter: ${pair}`).toBe(true);
+    }
+  });
+
+  it('quotes and percent-encodes header parameters', () => {
+    const { header } = signRequest({ ...base, token: 'a b@c.com' });
+    expect(header).toContain('oauth_token="a%20b%40c.com"');
   });
 
   it('is deterministic for a fixed nonce and timestamp', () => {

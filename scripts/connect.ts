@@ -15,13 +15,11 @@
 import { createInterface } from 'node:readline/promises';
 import { stdin, stdout, argv, env, exit } from 'node:process';
 
-import { signRequest } from '../src/lib/oauth';
+import { buildExchangeRequest, parseExchangeResponse } from '../src/lib/xauth';
 
 /** Control bytes we must handle ourselves once the terminal is in raw mode. */
 const ETX = '\u0003'; // Ctrl-C
 const DEL = '\u007f'; // Backspace on most terminals
-
-const ACCESS_TOKEN_URL = 'https://www.instapaper.com/api/1/oauth/access_token';
 
 /**
  * Reads a line without echoing it.
@@ -104,30 +102,16 @@ async function main(): Promise<void> {
   const password = await readPassword('Instapaper password (not shown): ');
   if (!password) fail('No password given.');
 
-  // xAuth sends the credentials as signed protocol parameters, not as a body.
-  const { header } = signRequest({
-    method: 'POST',
-    url: ACCESS_TOKEN_URL,
-    consumerKey,
-    consumerSecret,
-    extra: [
-      ['x_auth_username', email],
-      ['x_auth_password', password],
-      ['x_auth_mode', 'client_auth'],
-    ],
-  });
+  const request = buildExchangeRequest({ email, password, consumerKey, consumerSecret });
 
   process.stdout.write('\nExchanging… ');
 
   let response: Response;
   try {
-    response = await fetch(ACCESS_TOKEN_URL, {
-      method: 'POST',
-      headers: {
-        authorization: header,
-        'content-type': 'application/x-www-form-urlencoded',
-        'content-length': '0',
-      },
+    response = await fetch(request.url, {
+      method: request.method,
+      headers: request.headers,
+      body: request.body,
       signal: AbortSignal.timeout(30_000),
     });
   } catch (error) {
@@ -159,11 +143,9 @@ async function main(): Promise<void> {
   }
 
   // The response is form-encoded, not JSON.
-  const parsed = new URLSearchParams(body);
-  const token = parsed.get('oauth_token');
-  const tokenSecret = parsed.get('oauth_token_secret');
+  const tokens = parseExchangeResponse(body);
 
-  if (!token || !tokenSecret) {
+  if (!tokens) {
     console.log('failed.\n');
     fail(`Instapaper returned 200 without a token.\nBody: ${body.slice(0, 400)}`);
   }
@@ -172,8 +154,8 @@ async function main(): Promise<void> {
   console.log("Add these to your .env locally, and to your host's environment variables");
   console.log('in production. Treat them like a password — they grant full access to');
   console.log('your Instapaper account.\n');
-  console.log(`INSTAPAPER_OAUTH_TOKEN=${token}`);
-  console.log(`INSTAPAPER_OAUTH_TOKEN_SECRET=${tokenSecret}\n`);
+  console.log(`INSTAPAPER_OAUTH_TOKEN=${tokens.token}`);
+  console.log(`INSTAPAPER_OAUTH_TOKEN_SECRET=${tokens.tokenSecret}\n`);
   console.log('Nothing was saved. Re-run this any time to get a fresh token.\n');
 }
 

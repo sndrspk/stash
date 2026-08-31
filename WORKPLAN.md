@@ -249,6 +249,20 @@ Two findings worth keeping:
   appears to succeed and every later call 401s. `vercel dev` uses `localhost`, so this is a trap
   rather than a defect — but it costs an hour if you meet it without knowing.
 
+- **The first real `connect` run returned 400, and that was our bug.** The `x_auth_*` credentials
+  were being signed and placed in the `Authorization` header with an empty body; they are
+  form-encoded *body* parameters, and the header carries only `oauth_*`. Instapaper never saw them,
+  so it rejected the request as malformed rather than as unauthorised.
+
+  Two things are worth taking from it. **400 and 401 mean different things and the distinction is
+  the diagnostic**: 400 is a malformed request, 401 is one that was understood and refused — only
+  the second is about credentials or permissions. And **every unit test passed while this was
+  broken**, because the signing helpers were correct and the request assembled out of them was not.
+  The fix removed the header/body escape hatch that made the mistake possible, moved request
+  construction into `src/lib/xauth.ts` where the wire format can be asserted, and pinned it: what is
+  in the body, what is in the header, and that the password is in neither the header nor anything
+  that logs one. Confirmed against a local echo server, not just in unit tests.
+
 **Left for the operator, and blocking Phase 2a:** run `npm run connect` once with real credentials.
 That is the only step that can confirm xAuth is enabled on the consumer key — it is granted
 per-application, separately from Full API access, and it fails nowhere else.

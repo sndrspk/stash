@@ -91,10 +91,17 @@ export interface SignOptions {
   /** Absent during the xAuth exchange, present for every call after it. */
   token?: string;
   tokenSecret?: string;
-  /** Form-encoded body parameters, which are signed alongside the query. */
+  /**
+   * Form-encoded body parameters. These are signed alongside the query, but they
+   * travel in the request body — **including xAuth's `x_auth_*`**.
+   *
+   * There is deliberately no option for "sign it and also put it in the header".
+   * OAuth 1.0a's `Authorization` header carries protocol parameters only, and an
+   * earlier version of this module offered such an escape hatch, which is exactly
+   * how `connect` came to send its credentials in the header with an empty body.
+   * Instapaper answered 400 — the parameters simply were not where it looks.
+   */
   body?: readonly Param[];
-  /** Extra protocol parameters, e.g. xAuth's `x_auth_*`. */
-  extra?: readonly Param[];
   /** Injectable so tests are deterministic; generated per request otherwise. */
   nonce?: string;
   timestamp?: string;
@@ -134,18 +141,14 @@ export function signRequest(options: SignOptions): SignedRequest {
     ...oauthParams,
     ...query,
     ...(options.body ?? []),
-    ...(options.extra ?? []),
   ]);
 
   const signature = hmacSha1(baseString, signingKey(options.consumerSecret, options.tokenSecret));
 
   // Only protocol parameters go in the header. Body and query parameters were
-  // signed, but they travel in the body and query where they belong.
-  const headerParams: Param[] = [
-    ...oauthParams,
-    ...(options.extra ?? []),
-    ['oauth_signature', signature],
-  ];
+  // signed, but they travel in the body and query where they belong — the caller
+  // is responsible for actually sending them there.
+  const headerParams: Param[] = [...oauthParams, ['oauth_signature', signature]];
 
   const header =
     'OAuth ' +
