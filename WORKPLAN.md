@@ -295,26 +295,60 @@ synthetic one.
 
 ## Phase 3 — Data layer and sync
 
-- [ ] IndexedDB schema (via `idb`):
-      - `bookmarks` — `bookmark_id` (key), `title`, `url`, `time`, `description`, `hash`, `folder`,
-        `state` (unread/archived/deleted), `synced_at`, `purge_after` (nullable).
-      - `article_text` — `bookmark_id` (key), `html`, `source` (`instapaper` | `extracted`),
-        `fetched_at`.
-      - `image_cache` — source URL (key), `image_url` (nullable), `status` (`ok`/`none`/`error`),
-        `resolved_at`. A `none` row is a permanent negative result and must never be retried.
-- [ ] `api/bookmarks`: proxies the bookmark list for the `unread` folder.
-- [ ] Client sync: upsert into IndexedDB, reconcile removals (a bookmark gone from Instapaper is
-      marked, not silently dropped).
-- [ ] `api/archive` and `api/delete`: one bookmark, one action, called only from an explicit user
-      click. There is deliberately no batch endpoint.
-- [ ] Optimistic archive/delete with rollback on failure; sets `purge_after = now + 7 days` on the
-      cached text and image rows.
-- [ ] Purge sweep on app start: drop cached text/images past `purge_after`. Undoing an action before
-      the deadline clears the mark and keeps the cache.
-- [ ] TanStack Query over the IndexedDB layer for the front-page and reading-view reads.
+- [x] IndexedDB schema (via `idb`), in [`src/lib/db.ts`](src/lib/db.ts). Two departures from the
+      sketch above, both deliberate:
+      - **`state` gained a fourth value, `gone`.** It is ours, not Instapaper's: the bookmark
+        vanished from the remote list without us archiving or deleting it — moved to another
+        folder, or removed from another client. See the reconcile rule below.
+      - **`article_text` is keyed `${bookmark_id}:${source}`, not by `bookmark_id`.** Phase 7's
+        store-beside-never-over requires both sources to coexist, which a single key per bookmark
+        cannot express. Keying by bookmark would have quietly made the extracted copy overwrite the
+        Instapaper one — the exact thing that rule exists to prevent.
+- [x] `api/bookmarks`: proxies the bookmark list for the `unread` folder. A pure proxy — it does no
+      filtering of its own, because reconciliation needs the previous state and that lives on the
+      client.
+- [x] Client sync: upsert into IndexedDB, reconcile removals. **A bookmark absent from the remote
+      list is marked `gone`, never deleted**, because dropping rows on absence makes the cache only
+      as trustworthy as the last response. A truncated page or a transient empty list would destroy
+      state that took API calls to build. Marking is reversible; the next sync that mentions the row
+      restores it.
+- [x] `api/archive` and `api/delete`: one bookmark, one action. The absence of a batch endpoint is
+      **enforced**, not merely intended — an array where a number belongs is a 400, not a loop.
+      Delete is irreversible at Instapaper, so that distinction is worth a test rather than a
+      comment.
+- [x] Optimistic archive/delete with exact rollback; sets `purge_after = now + 7 days` on the cached
+      text and image rows. The local mark returns a snapshot of every row it touched, which is what
+      makes the rollback exact rather than approximate.
+- [x] Purge sweep on app start, in `runStartupPurge`. Deletes only rows whose `purge_after` is set
+      and in the past; a null mark is not in the index at all, so it is never even considered.
+      Reappearing in a sync clears the mark, which is what makes an undone archive keep its text.
+- [x] TanStack Query over the IndexedDB layer. Queries read from **IndexedDB, never the network**;
+      syncing is a separate mutation that fetches, writes, then invalidates. So there is one source
+      of truth, it works offline, and a failed sync leaves the last good data on screen.
 
 **Done when:** the bookmark list round-trips, archiving in Stash is visible in Instapaper's own web
 UI, and the purge sweep drops exactly the rows past their grace period and no others.
+
+**Status:** the purge rule and the round trip are verified; visibility in Instapaper's own UI is
+not, and needs the operator.
+
+Driven in a real browser against the built client, with a stubbed Instapaper: unlock, sync, three
+articles newest-first, **reload and the list comes back from IndexedDB with no network call**,
+archive removes a row, and a forced 502 on the next archive restores the list exactly. 237 unit
+tests cover the rest, with the store tests running against a real IndexedDB implementation rather
+than a stand-in that would agree with our assumptions.
+
+The purge clause is asserted directly: three articles, one archived long ago, one archived just now,
+one never archived — exactly one row is collected, and the boundary is tested at the deadline as
+well as past it.
+
+**Left for the operator:** press Sync against the real account and confirm that archiving something
+in Stash shows up in Instapaper's own web UI. Everything up to the API call is verified; that this
+is the *right* API call is what a live run confirms.
+
+A plain list stands in for the front page meanwhile, labelled as a Phase 3 scaffold. Phase 5
+replaces it wholesale — it exists so the data layer is demonstrable, not as a half-built version of
+the newspaper layout.
 
 ---
 
