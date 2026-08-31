@@ -141,7 +141,13 @@ If a publisher refuses both ways, the honest answer for that one is to open it i
 
 Once per publisher, then whenever that session dies. In practice that means months for a
 subscription site where you ticked "keep me signed in", and sooner if you sign out, clear cookies,
-or change password. Stash tells you rather than failing quietly: if extraction succeeds but the
+or change password.
+
+**Sites behind Cloudflare are the exception.** If your stored cookies include `cf_clearance` or
+`__cf_bm`, expect to redo it more often. Cloudflare ties `cf_clearance` to the User-Agent and IP
+address that earned it — neither of which Stash reproduces — and `__cf_bm` expires within the hour.
+A session that includes them may work for a while and then stop for reasons unrelated to your
+login. It is the first thing to suspect when one host starts failing while others keep working. Stash tells you rather than failing quietly: if extraction succeeds but the
 result still looks truncated *and* cookies were sent for that host, the session has almost certainly
 expired — you'll get a "session may have expired" prompt with a re-paste action. It never clears the
 session on its own; one bad extraction isn't proof.

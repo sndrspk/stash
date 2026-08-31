@@ -304,9 +304,17 @@ fetches an article anonymously and authenticated and reports the difference. See
       out; non-2xx, empty body and empty Readability output are ordinary failures with a stable tag
       capped at 80 chars.
 - [x] `scripts/probe.ts`: the CLI, including `--file` for reducing a saved page with no network.
-- [ ] **Verify against live sites.** The fetch path is unexercised — this container's network policy
-      blocks arbitrary outbound hosts, so only the offline pipeline has been run end to end. First
-      task on a machine with real network access.
+- [x] **Verified against a live site.** nieuwsblad.be, 2026-08-31: anonymous `HTTP 403`, with a
+      pasted session `HTTP 200`, 636 KB fetched, 7,024 characters extracted, title and byline
+      correct. The premise holds — replaying a reader's own session turns a refusal into an article.
+      Two things that run showed up:
+      - The extracted text opens with a promotional interstitial ("Hoe is het voetbal … veranderd in
+        uw gemeente?"), not the article's lede. Readability kept a furniture block. This is the
+        duplicate-title / missing-intro / furniture work below, no longer hypothetical.
+      - The stored session includes `cf_clearance` and `__cf_bm`. Cloudflare binds `cf_clearance` to
+        the User-Agent and IP that earned it, and we send neither — so it works today but is the
+        first thing to suspect when that host starts failing, and it will expire far sooner than a
+        login cookie. Expectations in `docs/COOKIE_SETUP.md` should say so.
 - [ ] The four cleaners as separate pure functions over the fragment (`linkedom`): duplicate title,
       missing intro, page furniture, hero image. Furniture removal runs **at render time**, so a new
       rule fixes already-cached articles without a re-sync.
