@@ -53,7 +53,7 @@ export function formatSessionText(store: SessionStore): string {
   const lines = [
     '# Stash publisher sessions — one host per line, then its Cookie: header value.',
     '# These are credentials for your subscriptions. This file is git-ignored; keep it that way.',
-    '# Managed by `npm run session`. See docs/COOKIE_SETUP.md.',
+    '# Managed by `npm run session`. See SESSIONS.md.',
     '',
   ];
   for (const host of Object.keys(store).sort()) {

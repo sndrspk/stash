@@ -291,7 +291,7 @@ order — each stage is independently useful, which is what made it tractable on
 **Built ahead of the phases it belongs to**, because it answers the riskiest product question — is
 the manual cookie paste worth doing? — before anything depends on the answer. `npm run probe`
 fetches an article anonymously and authenticated and reports the difference. See
-[`docs/COOKIE_SETUP.md`](docs/COOKIE_SETUP.md).
+[`SESSIONS.md`](SESSIONS.md).
 
 ### 7a — Unauthenticated extraction
 
@@ -314,7 +314,7 @@ fetches an article anonymously and authenticated and reports the difference. See
       - The stored session includes `cf_clearance` and `__cf_bm`. Cloudflare binds `cf_clearance` to
         the User-Agent and IP that earned it, and we send neither — so it works today but is the
         first thing to suspect when that host starts failing, and it will expire far sooner than a
-        login cookie. Expectations in `docs/COOKIE_SETUP.md` should say so.
+        login cookie. Expectations in `SESSIONS.md` should say so.
 - [ ] The four cleaners as separate pure functions over the fragment (`linkedom`): duplicate title,
       missing intro, page furniture, hero image. Furniture removal runs **at render time**, so a new
       rule fixes already-cached articles without a re-sync.

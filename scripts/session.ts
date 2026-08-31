@@ -152,7 +152,7 @@ async function main(): Promise<number> {
       console.error(`  ${BOLD}npm run session -- add ${host} --from head.txt${OFF}  from a file`);
     }
     console.error('');
-    console.error(`${DIM}Where to find the header: docs/COOKIE_SETUP.md${OFF}`);
+    console.error(`${DIM}Where to find the header: SESSIONS.md${OFF}`);
     return 1;
   }
 
@@ -164,7 +164,7 @@ async function main(): Promise<number> {
     console.error(`  → Headers → Request Headers → right-click ${BOLD}cookie${OFF} → Copy value`);
     console.error('');
     console.error(`${DIM}Not the Application → Cookies panel, though a paste from there also works.${OFF}`);
-    console.error(`${DIM}See docs/COOKIE_SETUP.md.${OFF}`);
+    console.error(`${DIM}See SESSIONS.md.${OFF}`);
     return 1;
   }
 

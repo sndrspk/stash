@@ -31,7 +31,7 @@ what each attempt got:
   with session      HTTP 200  raw   448 KB  extracted   18,455 chars  looks complete
 ```
 
-[`docs/COOKIE_SETUP.md`](docs/COOKIE_SETUP.md) covers where to get the cookie header.
+[`SESSIONS.md`](SESSIONS.md) covers where to get the cookie header.
 `--file <path>` runs the same pipeline over a saved HTML file, with no network.
 
 ## What it does
@@ -93,9 +93,9 @@ src/lib/              Extraction core — cookies, truncation, fetch guard, extr
 scripts/probe.ts      CLI: does a session change what this publisher serves?
 test/                 Unit tests, adversarial where it matters
 fixtures/             Saved pages for offline testing
+SESSIONS.md           How to give Stash a publisher session, step by step
 docs/DESIGN_SPEC.md   Product + technical spec (source of truth)
 docs/EXTRACTION.md    Full-text extraction, ported from the SanFeedBin method
-docs/COOKIE_SETUP.md  How to give Stash a publisher session
 WORKPLAN.md           Phased implementation plan, decisions, open questions, risks
 .env.example          Every environment variable, documented
 ```

@@ -9,7 +9,7 @@
  *
  *   npm run probe -- <url> [options]
  *
- *   --sessions <file>   session store (default: sessions.json)
+ *   --sessions <file>   session store (default: sessions.txt, then sessions.json)
  *   --anon-only         skip the authenticated attempt
  *   --auth-only         skip the anonymous attempt
  *   --file <path>       reduce a saved HTML file instead of fetching (no network)
@@ -92,7 +92,7 @@ function isRefusal(result: ExtractResult | null): boolean {
 }
 
 function addSessionHint(host: string): void {
-  console.log(`    ${DIM}npm run session -- add ${host}${OFF}   ${DIM}(see docs/COOKIE_SETUP.md)${OFF}`);
+  console.log(`    ${DIM}npm run session -- add ${host}${OFF}   ${DIM}(see SESSIONS.md)${OFF}`);
 }
 
 function botProtectionHint(): void {
@@ -157,7 +157,7 @@ function summarize(host: string, anon: ExtractResult | null, auth: ExtractResult
 async function main(): Promise<number> {
   const args = parseArgs(process.argv.slice(2));
   if (args.url === '') {
-    console.error('usage: npm run probe -- <url> [--sessions sessions.json] [--out article.html]');
+    console.error('usage: npm run probe -- <url> [--sessions sessions.txt] [--out article.html]');
     return 2;
   }
 
