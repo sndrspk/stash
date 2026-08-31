@@ -21,7 +21,8 @@ export function normalizeHost(host: string): string {
 const IPV4 = /^\d{1,3}(\.\d{1,3}){3}$/;
 
 /** A hostname: dot-separated labels, or an IP literal. No scheme, path, or punctuation. */
-const HOSTNAME = /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$/;
+const HOSTNAME =
+  /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$/;
 
 /**
  * Turn what someone typed into a hostname, or return null.
@@ -45,7 +46,9 @@ export function coerceHost(input: string): string | null {
   }
 
   // A bare host, possibly with a path or port stuck to it.
-  const host = normalizeHost(raw.split('/')[0]?.split('?')[0]?.split('#')[0]?.replace(/:\d+$/, '') ?? '');
+  const host = normalizeHost(
+    raw.split('/')[0]?.split('?')[0]?.split('#')[0]?.replace(/:\d+$/, '') ?? '',
+  );
   return HOSTNAME.test(host) ? host : null;
 }
 
@@ -116,7 +119,9 @@ export function domainMatches(urlHost: string, savedHost: string): boolean {
  */
 export function parseCookieHeader(raw: string): Map<string, string> {
   const out = new Map<string, string>();
-  const body = stripControlChars(raw).trim().replace(/^cookie\s*:\s*/i, '');
+  const body = stripControlChars(raw)
+    .trim()
+    .replace(/^cookie\s*:\s*/i, '');
   for (const part of body.split(';')) {
     const chunk = part.trim();
     if (chunk === '') continue;
@@ -178,7 +183,11 @@ export function parseCookieInput(raw: string): ParsedCookieInput {
 
   const table = parseCookieTable(raw);
   if (table.size > 0) {
-    return { cookies: table, format: 'table', hint: `${table.size} cookies from a pasted cookie table` };
+    return {
+      cookies: table,
+      format: 'table',
+      hint: `${table.size} cookies from a pasted cookie table`,
+    };
   }
 
   // Nothing usable. Describe the shape without echoing anything that might be a secret.

@@ -1,9 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { BlockedUrlError, addressBlocked, assertFetchable, isInstapaperHost } from '../src/lib/fetch-guard.js';
+import {
+  BlockedUrlError,
+  addressBlocked,
+  assertFetchable,
+  isInstapaperHost,
+} from '../src/lib/fetch-guard.js';
 
 describe('addressBlocked', () => {
   it('blocks loopback, private and link-local IPv4', () => {
-    for (const ip of ['127.0.0.1', '10.0.0.1', '172.16.0.1', '172.31.255.255', '192.168.1.1', '0.0.0.0']) {
+    for (const ip of [
+      '127.0.0.1',
+      '10.0.0.1',
+      '172.16.0.1',
+      '172.31.255.255',
+      '192.168.1.1',
+      '0.0.0.0',
+    ]) {
       expect(addressBlocked(ip, 4), ip).toBe(true);
     }
   });
@@ -14,7 +26,15 @@ describe('addressBlocked', () => {
   });
 
   it('blocks CGNAT, benchmarking, documentation and multicast ranges', () => {
-    for (const ip of ['100.64.0.1', '198.18.0.1', '192.0.2.1', '198.51.100.1', '203.0.113.1', '224.0.0.1', '255.255.255.255']) {
+    for (const ip of [
+      '100.64.0.1',
+      '198.18.0.1',
+      '192.0.2.1',
+      '198.51.100.1',
+      '203.0.113.1',
+      '224.0.0.1',
+      '255.255.255.255',
+    ]) {
       expect(addressBlocked(ip, 4), ip).toBe(true);
     }
   });
@@ -26,7 +46,15 @@ describe('addressBlocked', () => {
   });
 
   it('blocks loopback, unique-local and link-local IPv6', () => {
-    for (const ip of ['::1', '::', 'fc00::1', 'fd12:3456::1', 'fe80::1', 'ff02::1', '2001:db8::1']) {
+    for (const ip of [
+      '::1',
+      '::',
+      'fc00::1',
+      'fd12:3456::1',
+      'fe80::1',
+      'ff02::1',
+      '2001:db8::1',
+    ]) {
       expect(addressBlocked(ip, 6), ip).toBe(true);
     }
   });
@@ -63,23 +91,35 @@ describe('isInstapaperHost', () => {
 
 describe('assertFetchable', () => {
   it('rejects non-HTTP schemes', async () => {
-    await expect(assertFetchable(new URL('file:///etc/passwd'))).rejects.toBeInstanceOf(BlockedUrlError);
-    await expect(assertFetchable(new URL('ftp://example.com/x'))).rejects.toBeInstanceOf(BlockedUrlError);
-  });
-
-  it('refuses to fetch instapaper.com, whose terms forbid it', async () => {
-    await expect(assertFetchable(new URL('https://www.instapaper.com/u'))).rejects.toThrow(/instapaper/i);
-  });
-
-  it('rejects a host that resolves to a blocked address', async () => {
-    await expect(assertFetchable(new URL('http://localhost:8080/'))).rejects.toBeInstanceOf(BlockedUrlError);
-    await expect(assertFetchable(new URL('http://127.0.0.1/'))).rejects.toBeInstanceOf(BlockedUrlError);
-    await expect(assertFetchable(new URL('http://169.254.169.254/latest/meta-data/'))).rejects.toBeInstanceOf(
+    await expect(assertFetchable(new URL('file:///etc/passwd'))).rejects.toBeInstanceOf(
+      BlockedUrlError,
+    );
+    await expect(assertFetchable(new URL('ftp://example.com/x'))).rejects.toBeInstanceOf(
       BlockedUrlError,
     );
   });
 
+  it('refuses to fetch instapaper.com, whose terms forbid it', async () => {
+    await expect(assertFetchable(new URL('https://www.instapaper.com/u'))).rejects.toThrow(
+      /instapaper/i,
+    );
+  });
+
+  it('rejects a host that resolves to a blocked address', async () => {
+    await expect(assertFetchable(new URL('http://localhost:8080/'))).rejects.toBeInstanceOf(
+      BlockedUrlError,
+    );
+    await expect(assertFetchable(new URL('http://127.0.0.1/'))).rejects.toBeInstanceOf(
+      BlockedUrlError,
+    );
+    await expect(
+      assertFetchable(new URL('http://169.254.169.254/latest/meta-data/')),
+    ).rejects.toBeInstanceOf(BlockedUrlError);
+  });
+
   it('rejects a host that does not resolve', async () => {
-    await expect(assertFetchable(new URL('http://no-such-host.invalid/'))).rejects.toBeInstanceOf(BlockedUrlError);
+    await expect(assertFetchable(new URL('http://no-such-host.invalid/'))).rejects.toBeInstanceOf(
+      BlockedUrlError,
+    );
   });
 });

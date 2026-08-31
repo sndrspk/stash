@@ -1,0 +1,191 @@
+/*
+ * The base theme layer: colour, type scale and spacing as custom properties.
+ *
+ * Three-state theming, matching what the reader actually chose:
+ *   - no `data-theme` on <html>  → follow the OS (`prefers-color-scheme`)
+ *   - data-theme="light"/"dark"  → an explicit choice, which wins over the OS
+ * Every colour gets its value on bare `:root` first, so nothing depends on a media
+ * query having matched. The dark block only redefines.
+ */
+
+:root {
+  /* --- Palette: light --- */
+  --paper: #faf8f4;
+  --paper-raised: #ffffff;
+  --paper-sunken: #f1ede5;
+  --ink: #12100e;
+  --ink-muted: #56504a;
+  --ink-faint: #8b8379;
+  --rule: #e0dad0;
+  --accent: #8c2f19;
+  --accent-hover: #a83a20;
+  --danger: #9b2c2c;
+
+  /* --- Type --- */
+  --font-ui: 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-reading: 'Source Serif 4', ui-serif, Georgia, 'Times New Roman', serif;
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.375rem;
+  --text-2xl: 1.75rem;
+  --text-3xl: 2.25rem;
+  --text-4xl: 3rem;
+
+  --leading-tight: 1.15;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.7;
+
+  /* --- Space --- */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+
+  --radius: 2px;
+  --measure: 68ch;
+
+  /*
+   * Reading-view defaults. The column-width presets are the spec's, verbatim:
+   * Narrow 22em / Medium 34em / Wide 56em, default Medium. Phase 6 reads
+   * --reading-column-width to clamp wide embeds inside a column; it lives here
+   * so the value has one home rather than one per component.
+   */
+  --reading-column-width: 34em;
+  --reading-column-gap: var(--space-12);
+  --reading-font-size: 1.125rem;
+  --reading-line-height: 1.6;
+
+  color-scheme: light;
+}
+
+/* --- Palette: dark --- */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --paper: #12100e;
+    --paper-raised: #1c1a17;
+    --paper-sunken: #0b0a09;
+    --ink: #eae5dc;
+    --ink-muted: #a49c91;
+    --ink-faint: #6f675e;
+    --rule: #2c2823;
+    --accent: #e0714f;
+    --accent-hover: #ef8564;
+    --danger: #e06c6c;
+
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme='dark'] {
+  --paper: #12100e;
+  --paper-raised: #1c1a17;
+  --paper-sunken: #0b0a09;
+  --ink: #eae5dc;
+  --ink-muted: #a49c91;
+  --ink-faint: #6f675e;
+  --rule: #2c2823;
+  --accent: #e0714f;
+  --accent-hover: #ef8564;
+  --danger: #e06c6c;
+
+  color-scheme: dark;
+}
+
+/* --- Reset --- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  /* 100dvh, not 100vh: iOS Safari's address bar collapsing changes vh mid-scroll,
+     which Phase 6's column measurement cannot tolerate. Start honest here. */
+  min-height: 100dvh;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3,
+h4,
+p,
+figure,
+blockquote {
+  margin: 0;
+}
+
+img,
+picture,
+video,
+canvas,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+a {
+  color: var(--accent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.15em;
+}
+
+a:hover {
+  color: var(--accent-hover);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Respect a reader who has asked the OS for less motion. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Visually hidden, still read aloud. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}

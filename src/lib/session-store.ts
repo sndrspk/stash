@@ -41,7 +41,10 @@ export function parseSessionText(text: string): SessionStore {
     const cut = Math.min(...candidates);
 
     const host = line.slice(0, cut).trim();
-    const value = line.slice(cut).replace(/^[\s=]+/, '').trim();
+    const value = line
+      .slice(cut)
+      .replace(/^[\s=]+/, '')
+      .trim();
     if (host === '' || value === '') continue;
     store[host] = stripControlChars(value);
   }
@@ -114,7 +117,8 @@ export interface LoadedStore {
  * deleted or overwritten either, since it is the caller's data to keep.
  */
 export async function loadSessionStore(explicitPath?: string | null): Promise<LoadedStore> {
-  const candidates = explicitPath !== undefined && explicitPath !== null ? [explicitPath] : [...DEFAULT_STORE_PATHS];
+  const candidates =
+    explicitPath !== undefined && explicitPath !== null ? [explicitPath] : [...DEFAULT_STORE_PATHS];
   const problems: string[] = [];
 
   for (const path of candidates) {

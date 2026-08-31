@@ -166,7 +166,11 @@ describe('parseCookieInput', () => {
 
   // The paste people reach for first: DevTools → Application → Cookies → copy rows.
   it('recovers a tab-separated cookie table', () => {
-    const table = ['name\tvalue\tdomain\tpath', 'sessionid\tabc123\t.ft.com\t/', 'uid\t42\t.ft.com\t/'].join('\n');
+    const table = [
+      'name\tvalue\tdomain\tpath',
+      'sessionid\tabc123\t.ft.com\t/',
+      'uid\t42\t.ft.com\t/',
+    ].join('\n');
     const result = parseCookieInput(table);
     expect(result.format).toBe('table');
     expect(result.cookies.get('sessionid')).toBe('abc123');

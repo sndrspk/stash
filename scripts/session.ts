@@ -18,14 +18,25 @@
 
 import { readFile } from 'node:fs/promises';
 import { createInterface } from 'node:readline/promises';
-import { coerceHost, cookieNames, mergeCookieHeaders, parseCookieInput, serializeCookies } from '../src/lib/cookies.js';
-import { DEFAULT_STORE_PATHS, loadSessionStore, saveSessionStore, SessionStoreError } from '../src/lib/session-store.js';
+import {
+  coerceHost,
+  cookieNames,
+  mergeCookieHeaders,
+  parseCookieInput,
+  serializeCookies,
+} from '../src/lib/cookies.js';
+import {
+  DEFAULT_STORE_PATHS,
+  loadSessionStore,
+  saveSessionStore,
+  SessionStoreError,
+} from '../src/lib/session-store.js';
 
 const BOLD = '[1m';
 const DIM = '[2m';
 const RED = '[31m';
 const GREEN = '[32m';
-const YELLOW = "\u001b[33m";
+const YELLOW = '\u001b[33m';
 const OFF = '[0m';
 
 const USAGE = `usage:
@@ -93,13 +104,17 @@ async function main(): Promise<number> {
   if (command === 'list') {
     const hosts = Object.keys(store).sort();
     if (hosts.length === 0) {
-      console.log(`${DIM}No sessions stored${loaded.path !== null ? ` in ${loaded.path}` : ''}.${OFF}`);
+      console.log(
+        `${DIM}No sessions stored${loaded.path !== null ? ` in ${loaded.path}` : ''}.${OFF}`,
+      );
       return 0;
     }
     console.log(`${DIM}${loaded.path}${OFF}`);
     for (const host of hosts) {
       const names = cookieNames(store[host] ?? '');
-      console.log(`  ${BOLD}${host}${OFF}  ${DIM}${names.length} cookies — ${names.join(', ')}${OFF}`);
+      console.log(
+        `  ${BOLD}${host}${OFF}  ${DIM}${names.length} cookies — ${names.join(', ')}${OFF}`,
+      );
     }
     return 0;
   }
@@ -113,7 +128,9 @@ async function main(): Promise<number> {
     console.error(`${RED}"${hostArg}" is not a hostname.${OFF}`);
     console.error(`${DIM}Pass the host, or any URL on it:${OFF}`);
     console.error(`${DIM}  npm run session -- ${command} www.nieuwsblad.be${OFF}`);
-    console.error(`${DIM}  npm run session -- ${command} https://www.nieuwsblad.be/cnt/article${OFF}`);
+    console.error(
+      `${DIM}  npm run session -- ${command} https://www.nieuwsblad.be/cnt/article${OFF}`,
+    );
     return 2;
   }
 
@@ -148,7 +165,9 @@ async function main(): Promise<number> {
       console.error('If you piped from the clipboard, it no longer holds the cookie header —');
       console.error('copying anything else since replaces it. Try one of these instead:');
       console.error('');
-      console.error(`  ${BOLD}npm run session -- add ${host}${OFF}                 paste at the prompt, press Enter`);
+      console.error(
+        `  ${BOLD}npm run session -- add ${host}${OFF}                 paste at the prompt, press Enter`,
+      );
       console.error(`  ${BOLD}npm run session -- add ${host} --from head.txt${OFF}  from a file`);
     }
     console.error('');
@@ -157,19 +176,27 @@ async function main(): Promise<number> {
   }
 
   if (parsed.format === 'unrecognised') {
-    console.error(`${RED}That doesn't look like a Cookie: header${OFF} — stdin held ${parsed.hint}.`);
+    console.error(
+      `${RED}That doesn't look like a Cookie: header${OFF} — stdin held ${parsed.hint}.`,
+    );
     console.error('');
     console.error('You want the value of the "cookie" REQUEST header:');
-    console.error(`  DevTools → ${BOLD}Network${OFF} → reload → click the first (document) request`);
+    console.error(
+      `  DevTools → ${BOLD}Network${OFF} → reload → click the first (document) request`,
+    );
     console.error(`  → Headers → Request Headers → right-click ${BOLD}cookie${OFF} → Copy value`);
     console.error('');
-    console.error(`${DIM}Not the Application → Cookies panel, though a paste from there also works.${OFF}`);
+    console.error(
+      `${DIM}Not the Application → Cookies panel, though a paste from there also works.${OFF}`,
+    );
     console.error(`${DIM}See SESSIONS.md.${OFF}`);
     return 1;
   }
 
   if (parsed.format === 'table') {
-    console.error(`${YELLOW}That looks like a pasted cookie table rather than a header — reading it anyway.${OFF}`);
+    console.error(
+      `${YELLOW}That looks like a pasted cookie table rather than a header — reading it anyway.${OFF}`,
+    );
     console.error('');
   }
 
@@ -180,7 +207,9 @@ async function main(): Promise<number> {
 
   await saveSessionStore(store, target);
   const names = cookieNames(store[host] ?? '');
-  console.log(`${GREEN}Stored${OFF} ${names.length} cookies for ${BOLD}${host}${OFF} in ${target}.`);
+  console.log(
+    `${GREEN}Stored${OFF} ${names.length} cookies for ${BOLD}${host}${OFF} in ${target}.`,
+  );
   console.log(`${DIM}${names.join(', ')}${OFF}`);
   console.log('');
   if (loaded.problems.length > 0) {
