@@ -1,10 +1,21 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2022", "DOM"],
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "moduleResolution": "bundler",
+
+    /*
+     * One config covers the client, the CLI scripts, the functions and the tests,
+     * which means `node` types and the DOM lib are both in scope everywhere. The
+     * cost is that nothing stops client code importing `node:fs` — the build would
+     * catch it, but not the typechecker. Worth splitting into project references if
+     * that ever actually happens; not worth the indirection before it does.
+     */
     "types": ["node"],
+
+    "jsx": "react-jsx",
+
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
@@ -15,5 +26,5 @@
     "resolveJsonModule": true,
     "isolatedModules": true
   },
-  "include": ["src", "scripts", "test"]
+  "include": ["src", "scripts", "test", "api", "vite.config.ts"]
 }

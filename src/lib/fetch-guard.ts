@@ -167,7 +167,14 @@ export async function guardedFetch(
     if (response.status >= 300 && response.status < 400) {
       const location = response.headers.get('location');
       if (location === null) {
-        return { url: current.toString(), status: response.status, body: '', bytes: 0, redirects, truncatedAtCap: false };
+        return {
+          url: current.toString(),
+          status: response.status,
+          body: '',
+          bytes: 0,
+          redirects,
+          truncatedAtCap: false,
+        };
       }
       if (redirects >= maxRedirects) throw new BlockedUrlError('too many redirects');
       const next = new URL(location, current);

@@ -9,7 +9,9 @@ describe('plainText', () => {
   });
 
   it('drops script and style bodies entirely', () => {
-    expect(plainText('<p>a</p><script>var x = "hidden";</script><style>p{color:red}</style>')).toBe('a');
+    expect(plainText('<p>a</p><script>var x = "hidden";</script><style>p{color:red}</style>')).toBe(
+      'a',
+    );
   });
 
   it('decodes the entities that affect length most', () => {

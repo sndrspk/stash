@@ -1,0 +1,67 @@
+/*
+ * Self-hosted rather than loaded from fonts.googleapis.com. Two reasons, both from
+ * the work plan: an installed PWA has to render offline in the reader's chosen face,
+ * and a third-party request per page load is a request we don't need to make.
+ *
+ * All four are variable fonts, latin subset, weight axis 400..700 — one file covers
+ * every weight the reading view offers. Refresh them with scripts/fonts.ts.
+ *
+ * `swap` on the reading faces: text appears immediately in the fallback and reflows
+ * when the face arrives. For an article that is the right trade — a blank column is
+ * worse than a brief substitution.
+ */
+
+/* --- UI --- */
+@font-face {
+  font-family: 'Geist';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('/fonts/geist-latin.woff2') format('woff2-variations');
+}
+
+/* --- Reading faces --- */
+@font-face {
+  font-family: 'Source Serif 4';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('/fonts/source-serif-4-latin.woff2') format('woff2-variations');
+}
+@font-face {
+  font-family: 'Source Serif 4';
+  font-style: italic;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('/fonts/source-serif-4-italic-latin.woff2') format('woff2-variations');
+}
+
+@font-face {
+  font-family: 'Crimson Pro';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('/fonts/crimson-pro-latin.woff2') format('woff2-variations');
+}
+@font-face {
+  font-family: 'Crimson Pro';
+  font-style: italic;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('/fonts/crimson-pro-italic-latin.woff2') format('woff2-variations');
+}
+
+@font-face {
+  font-family: 'Piazzolla';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('/fonts/piazzolla-latin.woff2') format('woff2-variations');
+}
+@font-face {
+  font-family: 'Piazzolla';
+  font-style: italic;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('/fonts/piazzolla-italic-latin.woff2') format('woff2-variations');
+}

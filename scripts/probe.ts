@@ -22,7 +22,11 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { cookieHeaderFor, cookieNames } from '../src/lib/cookies.js';
 import { extract, extractFromHtml, type ExtractResult } from '../src/lib/extract.js';
-import { DEFAULT_STORE_PATHS, loadSessionStore, SessionStoreError } from '../src/lib/session-store.js';
+import {
+  DEFAULT_STORE_PATHS,
+  loadSessionStore,
+  SessionStoreError,
+} from '../src/lib/session-store.js';
 
 const BOLD = '[1m';
 const DIM = '[2m';
@@ -83,7 +87,8 @@ function report(label: string, result: ExtractResult): void {
     `${head}HTTP ${result.status}  raw ${kb(result.rawBytes).padStart(7)}  ` +
       `extracted ${n(result.text.length).padStart(8)} chars  ${verdict}`,
   );
-  if (result.redirects > 0) console.log(`${' '.repeat(20)}${DIM}${result.redirects} redirect(s) → ${result.url}${OFF}`);
+  if (result.redirects > 0)
+    console.log(`${' '.repeat(20)}${DIM}${result.redirects} redirect(s) → ${result.url}${OFF}`);
 }
 
 /** A refusal the publisher issued deliberately, rather than a transport failure. */
@@ -98,7 +103,9 @@ function addSessionHint(host: string): void {
 function botProtectionHint(): void {
   console.log(`    This is the anti-bot case in docs/EXTRACTION.md: a challenge page needs a`);
   console.log(`    browser to answer it, and no cookie will substitute. Stash sends an honest`);
-  console.log(`    ${DIM}Stash/0.1${OFF} User-Agent; some publishers refuse anything that isn't a browser.`);
+  console.log(
+    `    ${DIM}Stash/0.1${OFF} User-Agent; some publishers refuse anything that isn't a browser.`,
+  );
   console.log(`    Claiming to be one is a deliberate choice, not a default — see the posture`);
   console.log(`    note at the end of docs/EXTRACTION.md before changing it.`);
 }
@@ -110,7 +117,9 @@ function summarize(host: string, anon: ExtractResult | null, auth: ExtractResult
   // Both attempts ran.
   if (anon !== null && auth !== null) {
     if (isRefusal(anon) && auth.ok) {
-      console.log(`  ${GREEN}→ The session is not optional here${OFF} — ${host} refuses anonymous fetches`);
+      console.log(
+        `  ${GREEN}→ The session is not optional here${OFF} — ${host} refuses anonymous fetches`,
+      );
       console.log(`    outright, and serves the article once you're signed in.`);
       return;
     }
@@ -120,21 +129,29 @@ function summarize(host: string, anon: ExtractResult | null, auth: ExtractResult
       return;
     }
     if (authChars > anonChars * 1.5 && authChars > 0) {
-      console.log(`  ${GREEN}→ The session is doing the work here${OFF} — ${n(authChars - anonChars)} more characters.`);
+      console.log(
+        `  ${GREEN}→ The session is doing the work here${OFF} — ${n(authChars - anonChars)} more characters.`,
+      );
       return;
     }
     if (anon.ok && !anon.truncation.truncated) {
-      console.log(`  ${DIM}→ Anonymous extraction was already complete. No session needed for this one.${OFF}`);
+      console.log(
+        `  ${DIM}→ Anonymous extraction was already complete. No session needed for this one.${OFF}`,
+      );
       return;
     }
-    console.log(`  ${YELLOW}→ The session changed nothing.${OFF} Either it has expired, or this page builds`);
+    console.log(
+      `  ${YELLOW}→ The session changed nothing.${OFF} Either it has expired, or this page builds`,
+    );
     console.log(`    its body with JavaScript — which no amount of cookies will fix.`);
     return;
   }
 
   // Anonymous only: no session stored for this host.
   if (isRefusal(anon)) {
-    console.log(`  ${YELLOW}→ ${host} refused the anonymous fetch, and no session is stored for it.${OFF}`);
+    console.log(
+      `  ${YELLOW}→ ${host} refused the anonymous fetch, and no session is stored for it.${OFF}`,
+    );
     console.log(`    That is expected for a publisher that gates articles. Add your session and`);
     console.log(`    re-run — this is exactly the case the paste step exists for:`);
     addSessionHint(host);
@@ -180,8 +197,11 @@ async function main(): Promise<number> {
     report('from file', result);
     console.log('');
     if (result.ok) {
-      console.log(`  ${DIM}${result.title ?? '(no title)'}${result.byline !== null ? ` — ${result.byline}` : ''}${OFF}`);
-      if (args.show > 0) console.log(`  ${DIM}${result.text.slice(0, args.show).replace(/\s+/g, ' ')}…${OFF}`);
+      console.log(
+        `  ${DIM}${result.title ?? '(no title)'}${result.byline !== null ? ` — ${result.byline}` : ''}${OFF}`,
+      );
+      if (args.show > 0)
+        console.log(`  ${DIM}${result.text.slice(0, args.show).replace(/\s+/g, ' ')}…${OFF}`);
       if (args.out !== null) {
         await writeFile(args.out, result.html, 'utf8');
         console.log(`\n  wrote ${args.out}`);
@@ -204,7 +224,9 @@ async function main(): Promise<number> {
   if (cookie === null) {
     console.log(`${DIM}no stored session for this host (${storeLabel})${OFF}`);
   } else {
-    console.log(`${DIM}session: ${cookieNames(cookie).length} cookies — ${cookieNames(cookie).join(', ')}${OFF}`);
+    console.log(
+      `${DIM}session: ${cookieNames(cookie).length} cookies — ${cookieNames(cookie).join(', ')}${OFF}`,
+    );
   }
   console.log('');
 
@@ -230,7 +252,9 @@ async function main(): Promise<number> {
 
   if (best !== null && args.show > 0) {
     console.log('');
-    console.log(`  ${DIM}${best.title ?? '(no title)'}${best.byline !== null ? ` — ${best.byline}` : ''}${OFF}`);
+    console.log(
+      `  ${DIM}${best.title ?? '(no title)'}${best.byline !== null ? ` — ${best.byline}` : ''}${OFF}`,
+    );
     console.log(`  ${DIM}${best.text.slice(0, args.show).replace(/\s+/g, ' ')}…${OFF}`);
   }
 

@@ -1,0 +1,14 @@
+dist/
+dev-dist/
+coverage/
+node_modules/
+.vercel/
+package-lock.json
+
+# Captured and generated fixtures are kept byte-for-byte as they arrived.
+fixtures/
+
+# Prose. The spec and the work plan are hand-wrapped at 100 with deliberate breaks,
+# and DESIGN_SPEC.md is kept as it was authored — reflowing them churns the diff and
+# buys nothing. Markdown is reviewed by reading it, not by a formatter.
+*.md

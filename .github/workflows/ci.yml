@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A new push to a PR makes the in-flight run pointless.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Format
+        run: npm run format:check
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm run test
+
+      - name: Build
+        run: npm run build
+
+      # Phase 9 greps the built output for the real token at deploy time, which is the
+      # only check that can catch a leaked *value*. CI has no secrets, so it guards the
+      # two routes a value could take to get there instead.
+      #
+      # Grepping dist/ for variable *names* would be worse than useless: Vite inlines
+      # env values and drops the identifier, so a real leak shows up as the bare secret
+      # and no name — while UI copy that legitimately mentions STASH_PASSPHRASE trips it.
+      - name: Assert no client-exposed secrets
+        run: |
+          # Vite only exposes VITE_-prefixed variables to the client bundle.
+          if grep -qE '^[[:space:]]*VITE_' .env.example; then
+            echo "::error::.env.example declares a VITE_-prefixed variable — Vite inlines those into the client bundle."
+            exit 1
+          fi
+          # ...and client code must not reach for a server-only variable directly.
+          if grep -rIlE 'process\.env\.(INSTAPAPER|STASH)_|import\.meta\.env\.(INSTAPAPER|STASH)_' src/ 2>/dev/null; then
+            echo "::error::Client code reads a server-only environment variable."
+            exit 1
+          fi
+          echo "Clean: no path for a secret into the client bundle."

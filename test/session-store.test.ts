@@ -30,7 +30,10 @@ describe('parseSessionText', () => {
   });
 
   it('handles CRLF line endings', () => {
-    expect(parseSessionText('a.test x=1\r\nb.test y=2\r\n')).toEqual({ 'a.test': 'x=1', 'b.test': 'y=2' });
+    expect(parseSessionText('a.test x=1\r\nb.test y=2\r\n')).toEqual({
+      'a.test': 'x=1',
+      'b.test': 'y=2',
+    });
   });
 
   it('ignores a host with no cookies rather than storing an empty session', () => {

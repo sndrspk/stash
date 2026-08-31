@@ -53,7 +53,8 @@ function withBase(html: string, url: string): string {
   if (/<base\b/i.test(html)) return html;
   const base = `<base href="${url.replace(/"/g, '&quot;')}">`;
   if (/<head\b[^>]*>/i.test(html)) return html.replace(/<head\b[^>]*>/i, (m) => `${m}${base}`);
-  if (/<html\b[^>]*>/i.test(html)) return html.replace(/<html\b[^>]*>/i, (m) => `${m}<head>${base}</head>`);
+  if (/<html\b[^>]*>/i.test(html))
+    return html.replace(/<html\b[^>]*>/i, (m) => `${m}<head>${base}</head>`);
   return `${base}${html}`;
 }
 
@@ -100,13 +101,16 @@ export function extractFromHtml(html: string, url: string, authenticated = false
 }
 
 export async function extract(url: string, options: ExtractOptions = {}): Promise<ExtractResult> {
-  const authenticated = options.authenticated ?? (options.cookie !== null && options.cookie !== undefined && options.cookie !== '');
+  const authenticated =
+    options.authenticated ??
+    (options.cookie !== null && options.cookie !== undefined && options.cookie !== '');
 
   let response;
   try {
     response = await guardedFetch(url, options);
   } catch (error) {
-    if (error instanceof BlockedUrlError) return { ok: false, url, tag: tag(error.message), authenticated };
+    if (error instanceof BlockedUrlError)
+      return { ok: false, url, tag: tag(error.message), authenticated };
     if (error instanceof Error && error.name === 'TimeoutError') {
       return { ok: false, url, tag: 'Timed out', authenticated };
     }
@@ -121,5 +125,10 @@ export async function extract(url: string, options: ExtractOptions = {}): Promis
   if (!reduced.ok) return reduced;
 
   // Carry through what only the fetch knows.
-  return { ...reduced, status: response.status, rawBytes: response.bytes, redirects: response.redirects };
+  return {
+    ...reduced,
+    status: response.status,
+    rawBytes: response.bytes,
+    redirects: response.redirects,
+  };
 }
