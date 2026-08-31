@@ -5,6 +5,9 @@
   "type": "module",
   "description": "A read-it-later PWA for Instapaper with a newspaper-style front page",
   "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "probe": "tsx scripts/probe.ts",
     "test": "vitest run",
