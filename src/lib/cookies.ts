@@ -21,6 +21,33 @@ export function normalizeHost(host: string): string {
 const IPV4 = /^\d{1,3}(\.\d{1,3}){3}$/;
 
 /**
+ * Collapse CR, LF, TAB and any other C0/C1 control character to a single space.
+ *
+ * A header copied out of DevTools routinely carries a newline, and a control character
+ * in a request header is a header-injection bug at worst and a rejected request at best.
+ * Written as an explicit codepoint scan rather than a regex: the escapes for this range
+ * are easy to get subtly wrong, and this cannot be.
+ */
+export function stripControlChars(value: string): string {
+  let out = '';
+  let gap = false;
+  for (const ch of value) {
+    const code = ch.codePointAt(0) ?? 0;
+    const isControl = code <= 0x1f || (code >= 0x7f && code <= 0x9f);
+    if (isControl) {
+      gap = out !== '';
+      continue;
+    }
+    if (gap) {
+      out += ' ';
+      gap = false;
+    }
+    out += ch;
+  }
+  return out;
+}
+
+/**
  * RFC 6265 domain matching, and nothing looser.
  *
  * A cookie saved for host H is sent to request host U only when U === H, or U ends with
@@ -55,11 +82,12 @@ export function domainMatches(urlHost: string, savedHost: string): boolean {
  * Parse a raw `Cookie:` header value into name → value pairs.
  *
  * Tolerates what a person actually pastes: a leading `Cookie:` label, stray whitespace,
- * and values containing `=` (split on the first one only, never all of them).
+ * embedded newlines, and values containing `=` (split on the first one only, never all
+ * of them).
  */
 export function parseCookieHeader(raw: string): Map<string, string> {
   const out = new Map<string, string>();
-  const body = raw.trim().replace(/^cookie\s*:\s*/i, '');
+  const body = stripControlChars(raw).trim().replace(/^cookie\s*:\s*/i, '');
   for (const part of body.split(';')) {
     const chunk = part.trim();
     if (chunk === '') continue;

@@ -149,7 +149,10 @@ export async function guardedFetch(
     const headers: Record<string, string> = {
       'user-agent': userAgent,
       accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      'accept-language': 'en;q=0.9',
+      // No language preference of our own: the article is whatever language it is, and
+      // claiming English would make a Dutch or French publisher serve a translated or
+      // redirected page.
+      'accept-language': '*',
     };
     // Only send cookies to the host they were stored for; a redirect to another host
     // drops them rather than forwarding a session to a third party.

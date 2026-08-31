@@ -331,7 +331,10 @@ hard-paywalled one fails with a legible tag rather than an exception.
       follow a bounce to a third party.
 - [ ] KV binding + `lib/secrets.ts`: AES-GCM under `STASH_ENCRYPTION_KEY`, corrupt-blob recovery
       deletes and recreates rather than crashing. **Separate namespace from anything Instapaper.**
-      (The probe reads a git-ignored `sessions.json` in the meantime — same shape, no encryption.)
+      (The probe reads a git-ignored `sessions.txt` in the meantime — same shape, no encryption.)
+- [x] `scripts/session.ts`: add/list/remove from the CLI, reading the header from stdin so it stays
+      out of shell history. The dry run for Phase 7b's settings screen, and it enforces the same
+      rule: values go in, only names come out.
 - [ ] `api/sessions`: POST a host + `Cookie:` header value, DELETE one host, GET the host list.
       Only `name=value` pairs are stored; everything else is dropped. **The cookie values are never
       returned to the client** — GET lists hosts and nothing more.

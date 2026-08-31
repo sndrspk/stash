@@ -7,7 +7,8 @@
 # Publisher session cookies. These are credentials for your paid subscriptions.
 sessions.json
 sessions.*.json
-!sessions.example.json
+sessions.txt
+!sessions.example.txt
 
 # Dependencies
 node_modules/

@@ -43,21 +43,48 @@ iOS Safari has no usable DevTools, and Android's are awkward. Do this on a deskt
 store lives server-side, doing it once there covers every device you read on — which is an
 improvement on the Android app, where the store was per-install.
 
-## Trying it before you commit
+## Storing it
 
-Create `sessions.json` in the repo root — it is git-ignored, and in the real app this becomes the
-encrypted server-side store:
+Don't hand-edit a file. Pipe the header in:
 
-```json
-{
-  "www.ft.com": "PASTE_THE_COOKIE_HEADER_HERE"
-}
+```bash
+# macOS, straight from the clipboard
+pbpaste | npm run session -- add www.ft.com
+
+# Linux
+xclip -o -selection clipboard | npm run session -- add www.ft.com
+
+# anywhere: run it, paste, then press Ctrl-D
+npm run session -- add www.ft.com
 ```
 
-The key is the **host**, exactly as it appears in the address bar. A cookie saved for `ft.com`
-also covers `www.ft.com` and `markets.ft.com`; one saved for `www.ft.com` covers only that.
+Reading from stdin keeps the header out of your shell history. Nothing is echoed back but the
+cookie **names**:
 
-Then point the probe at an article that you know is paywalled:
+```
+Stored 4 cookies for www.ft.com in sessions.txt.
+FTSession, FTUser, consent, spoor-id
+```
+
+`npm run session -- list` shows what's stored, and `remove <host>` forgets one.
+
+The host is what appears in the address bar. A session saved for `ft.com` also covers `www.ft.com`
+and `markets.ft.com`; one saved for `www.ft.com` covers only that.
+
+Behind this is `sessions.txt` — one host per line, git-ignored, and the local stand-in for the
+encrypted server-side store. You *can* edit it by hand:
+
+```
+www.ft.com   FTSession=abc; FTUser=def
+```
+
+An older `sessions.json` still works, but JSON is a poor fit for pasted headers: a stray newline,
+quote or backslash breaks the whole file with an unhelpful byte offset. The line-based format has
+none of those failure modes.
+
+## Trying it
+
+Point the probe at an article you know is paywalled:
 
 ```bash
 npm run probe -- https://www.ft.com/content/some-article
@@ -75,14 +102,35 @@ session: 4 cookies — FTSession, FTUser, consent, spoor-id
   → The session is doing the work here — 17,608 more characters.
 ```
 
-That is the whole question answered. Three outcomes:
+That is the whole question answered. The probe tells you which outcome you got:
 
 - **Session much longer than anonymous** — worth doing for this publisher.
 - **Anonymous already complete** — this publisher needs no session at all. Don't store one.
+- **Anonymous refused, session worked** — the session isn't optional here; the publisher won't
+  serve the page to a signed-out reader at all. Common on Belgian and Dutch news sites.
 - **Session changed nothing** — either it has expired, or the page builds its body with JavaScript,
   which cookies cannot fix. See [the limits](EXTRACTION.md#what-this-does-not-solve).
+- **Refused both ways** — anti-bot protection, not a paywall. See below.
 
 Cookie **values** are never printed, only names. The probe follows the same rule the app does.
+
+## When you get HTTP 403
+
+A 403 on the anonymous attempt is ordinary and often the *expected* result — plenty of publishers
+refuse a signed-out fetch outright rather than serving a stub. Store your session and try again;
+that is precisely the case this feature exists for.
+
+A 403 **with** a valid session is different. It means the publisher is refusing the request itself,
+not the reader — bot protection reacting to a non-browser client. Stash identifies itself honestly
+as `Stash/0.1`, and some sites reject anything that isn't a browser.
+
+Sending a browser User-Agent would get past some of these. It is a deliberate choice rather than a
+default, because it is the first step from "a reading tool" toward "a circumvention tool", and the
+line is worth drawing on purpose — see the posture note at the end of
+[`EXTRACTION.md`](EXTRACTION.md#a-note-on-posture). It also would not help against a real challenge
+page, which needs a browser to answer it, not a browser's name.
+
+If a publisher refuses both ways, the honest answer for that one is to open it in a browser.
 
 ## How often you'll redo this
 
