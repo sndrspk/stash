@@ -25,10 +25,13 @@ use it, fork or clone this repo and deploy it yourself.
 - **Sync.** Archive and delete hit the Instapaper API, not just local state. Bookmarks added
   elsewhere (phone, browser extension) appear on the next refresh.
 - **Better text than Instapaper alone.** Instapaper's own extractor gives up on some paywalled or
-  script-heavy pages. When it returns nothing usable, Stash re-extracts the article itself.
+  script-heavy pages. When it returns nothing usable, Stash re-extracts the article itself — and
+  for publishers you subscribe to, it can replay a session you established yourself so the page
+  arrives complete.
 
-The full product and technical spec lives in [`docs/DESIGN_SPEC.md`](docs/DESIGN_SPEC.md); where
-the implementation deliberately departs from it, [`WORKPLAN.md`](WORKPLAN.md) records why.
+The product spec is [`docs/DESIGN_SPEC.md`](docs/DESIGN_SPEC.md) and the extraction subsystem is
+[`docs/EXTRACTION.md`](docs/EXTRACTION.md); where the implementation deliberately departs from
+either, [`WORKPLAN.md`](WORKPLAN.md) records why.
 
 ## Architecture
 
@@ -42,14 +45,21 @@ the implementation deliberately departs from it, [`WORKPLAN.md`](WORKPLAN.md) re
                                    └──────────────────────────┘       └──────────────┘
 ```
 
-- **No database and no user accounts.** The Instapaper OAuth token lives in the deployment's
-  environment variables and never reaches the browser.
+- **No user accounts.** The Instapaper OAuth token lives in the deployment's environment variables
+  and never reaches the browser.
 - **The serverless layer is not optional.** Instapaper's API and third-party sites don't send CORS
-  headers, so every outbound call is proxied. It is also the only place the token exists.
-- **Cache is per-device**, in IndexedDB. A second device re-syncs rather than sharing state — the
-  cost of having no backend, and a fair trade for a personal app.
+  headers, so every outbound call is proxied. It is also the only place credentials exist.
+- **Cache is per-device**, in IndexedDB: bookmarks, article text, reading preferences. None of it is
+  precious — Instapaper is the source of truth and text is re-fetchable — so eviction costs an API
+  round-trip, not data.
+- **A small KV store** holds the two things that can't live in the browser or in env vars: resolved
+  image URLs (expensive to re-derive, worth sharing across devices) and encrypted per-publisher
+  session cookies.
 - **Access is gated by a passphrase** you set at deploy time. Without it, anyone who finds the URL
   can read and delete your Instapaper queue.
+
+Where each piece of data lives, and why, is tabulated in
+[WORKPLAN.md](WORKPLAN.md#where-each-piece-of-data-lives).
 
 Planned stack: Vite + React + TypeScript, deployed to Vercel (static PWA + Node serverless
 functions). See [WORKPLAN.md](WORKPLAN.md#architecture-decided) for why, and what changes if you'd
@@ -59,7 +69,9 @@ rather use Cloudflare or Netlify.
 
 ```
 docs/DESIGN_SPEC.md   Product + technical spec (source of truth)
+docs/EXTRACTION.md    Full-text extraction, ported from the SanFeedBin method
 WORKPLAN.md           Phased implementation plan, decisions, open questions, risks
+.env.example          Every environment variable, documented
 LICENSE               MIT
 ```
 
@@ -68,12 +80,11 @@ Application code, functions and tooling land as the phases in `WORKPLAN.md` are 
 ## Getting started
 
 Nothing to run yet. Once Phase 1 lands, this section will cover prerequisites, the one-time
-`npm run connect` token exchange, the environment variables to set, and the deploy step.
+`npm run connect` token exchange, and the deploy step. `.env.example` already documents every
+variable you'll need.
 
-Running Stash against a real account requires Instapaper **Full API** credentials (a consumer key
-and secret), which Instapaper issues on request. See
-[Open questions](WORKPLAN.md#open-questions-and-blockers) — this is the one dependency that is not
-in our hands.
+Running your own instance requires Instapaper **Full API** credentials (a consumer key and secret,
+with xAuth enabled), which Instapaper issues on request.
 
 ## Constraints we hold ourselves to
 

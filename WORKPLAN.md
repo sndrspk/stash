@@ -20,7 +20,7 @@ The design spec assumed Supabase. That has been dropped. Stash is **single-tenan
 serves one person, and anyone else who wants it deploys their own from the public repo. Everything
 below follows from that.
 
-### No accounts, no database
+### No accounts, and almost no database
 
 There is no Supabase, no Postgres, no RLS, and no login for Stash itself. A user table with one row
 in it is not worth its own auth system. What Supabase was carrying in the spec, and what replaces
@@ -33,6 +33,31 @@ it:
 | Edge Functions as CORS proxy | serverless functions in the same deployment |
 | Bookmark/text/image cache tables | IndexedDB, per device |
 | Cross-device cache sharing | dropped; each device syncs for itself |
+
+One thing does need server-side persistence: the per-publisher session cookies the extraction
+fallback replays (see [`docs/EXTRACTION.md`](docs/EXTRACTION.md)). They are bearer credentials, so
+they must never reach the browser, and they change at runtime, so env vars can't hold them. That is
+a KV namespace, not a database — and it is worth one, rather than dragging auth back in.
+
+### Where each piece of data lives
+
+| Data | Home | Why |
+| --- | --- | --- |
+| Instapaper OAuth token | deployment env var | set once, never changes at runtime |
+| Instapaper consumer key/secret | deployment env var | same |
+| `STASH_PASSPHRASE`, encryption key | deployment env var | same |
+| Bookmark list | IndexedDB | pure cache — Instapaper is the source of truth |
+| Article text (both sources) | IndexedDB | cache; re-fetchable, purged 7 days after archive/delete |
+| Reading preferences | IndexedDB | per-device is fine |
+| Resolved `og:image` URLs | IndexedDB, **plus** server KV | expensive to re-resolve; the one cache worth sharing |
+| **Per-host site cookies** | **server KV, encrypted** | credentials: never client-side, must be updatable |
+
+**None of the client-side data is precious.** Bookmarks live in Instapaper, article text is
+re-fetchable, preferences are three numbers. This matters because browsers evict: iOS Safari clears
+site data for origins unused for ~7 days unless the PWA is installed to the home screen. Call
+`navigator.storage.persist()`, install the app, and accept that a wipe costs API round-trips rather
+than data. The single exception is image resolution — genuinely expensive to redo across hundreds of
+third-party sites — which is why it gets a server-side copy alongside the cookie store.
 
 ### The serverless layer stays
 
@@ -65,8 +90,17 @@ request must never reach Instapaper.
 ### Article text: two-tier extraction
 
 Instapaper's `get_text` is tried first. When it returns nothing, a stub, or obvious paywall
-boilerplate, Stash re-extracts from the source URL itself using the method from the Sanfeedbin
-Android project. **⚠ blocked** — see [Open questions](#open-questions-and-blockers).
+boilerplate, Stash re-extracts from the source URL itself, using the method ported from SanFeedBin.
+Specified in full in [`docs/EXTRACTION.md`](docs/EXTRACTION.md); the short version:
+
+- Everything downstream of the fetch ports cleanly — the truncation heuristic, Readability, the four
+  cleaners, store-beside-never-over, failure tags, retry backoff, single-flight.
+- **The cookie capture does not port.** SanFeedBin reads the WebView's jar via Android's
+  `CookieManager`; a browser cannot read another origin's cookies, and no API will ever let it.
+  Replaced in stages: unauthenticated extraction first (which already handles soft paywalls), then
+  manual per-host cookie paste in settings, then optionally a browser extension.
+- Site cookies live encrypted in server KV, in a **separate store from the Instapaper token** —
+  rotating one must never destroy the other.
 
 ### Hosting: Vercel
 
@@ -96,21 +130,19 @@ near-identical to Vercel. Nothing outside Phase 1 and Phase 8 depends on the cho
 
 ## Phase 0 — Prerequisites
 
-**⚠ Blocker: Instapaper Full API credentials.** The Full API (bookmark list, `get_text`, `archive`,
-`delete`) and the xAuth exchange both require a consumer key/secret that Instapaper issues manually
-on request, and xAuth has to be enabled per-application. Without it, nothing past Phase 2 can be
-tested against real data. Request it first — turnaround is out of our control. Until it arrives,
-Phases 1 and 3 (shell, cache layer) and the fixture-driven parts of Phase 6 (reading view) can
-proceed.
+- [x] Instapaper Full API consumer key/secret obtained. **They are secrets: they go in `.env`
+      locally and in the host's env vars, never in this repo, an issue, or a PR.** Verify xAuth is
+      enabled on the key with the first `connect` run — it is granted per-application and its
+      absence only shows up at the token exchange.
+- [x] SanFeedBin extraction method obtained and ported to a spec —
+      [`docs/EXTRACTION.md`](docs/EXTRACTION.md).
+- [ ] Capture a fixture set: ~20 real bookmark records and 5–6 `get_text` HTML payloads (one short,
+      one very long, one image-heavy, one with wide embeds/tables, one soft-paywalled where
+      `get_text` returns a stub, one hard-paywalled where nothing will help) in `fixtures/`, so the
+      front page, reading view and extraction fallback can be built and tested without live API
+      access.
 
-- [ ] Request Instapaper Full API consumer key/secret + xAuth permission.
-- [ ] Obtain the Sanfeedbin extraction method (see open questions).
-- [ ] Capture a fixture set: ~20 real bookmark records and 4–5 `get_text` HTML payloads (one short,
-      one very long, one image-heavy, one with wide embeds/tables, one where `get_text` fails on a
-      paywall) in `fixtures/`, so the front page, reading view and extraction fallback can be built
-      and tested without live API access.
-
-**Done when:** credentials requested and fixtures committed.
+**Done when:** fixtures committed.
 
 ---
 
@@ -220,9 +252,6 @@ real iteration in the native app, and reverting to naive CSS multi-column will r
 
 - [ ] `api/text`: `get_text` via the API, cached client-side. **Sanitize the returned HTML**
       (DOMPurify or equivalent) before injecting it — it is third-party content.
-- [ ] Extraction fallback: when `get_text` returns empty, a stub, or paywall boilerplate, re-extract
-      from the source URL using the Sanfeedbin method. Same SSRF guard as Phase 4. Record which
-      source produced the text so failures are debuggable. **⚠ blocked on the method.**
 - [ ] Multi-column horizontal pagination with the **deterministic column count** algorithm:
       measure natural height at `columnCount: 1`, compute
       `columnCount = ceil(naturalHeight / availableColumnHeight)`, then set an explicit width of
@@ -250,12 +279,68 @@ reflow the article under the reader's finger. Budget real time for this — it i
 source of "works on desktop, broken on my phone".
 
 **Done when:** a long, image-heavy article paginates correctly on desktop and on a real phone, the
-0px check passes, preferences apply live without losing the reader's position, and an article
-Instapaper failed to extract renders via the fallback.
+0px check passes, and preferences apply live without losing the reader's position.
 
 ---
 
-## Phase 7 — Offline and PWA polish
+## Phase 7 — Extraction fallback
+
+Full detail in [`docs/EXTRACTION.md`](docs/EXTRACTION.md). Build it in that document's own staged
+order — each stage is independently useful, which is what made it tractable on Android.
+
+### 7a — Unauthenticated extraction
+
+- [ ] `lib/truncation.ts`: the heuristic, pure and side-effect-free — under ~1500 characters, or a
+      short sentinel list ("read more", "continue reading"), `[…]` only when it ends the text. Unit
+      tests, no I/O.
+- [ ] `api/extract`: credential-free fetch (honest `Stash/1.0 (+repo)` User-Agent, redirects on,
+      10s connect / 15s read, serial with ~250ms delay) → `@mozilla/readability` → HTML fragment.
+      **Reuse Phase 4's SSRF guard** — same arbitrary-URL exposure, same rules.
+- [ ] One result type out. Non-2xx, empty body and empty Readability output are ordinary failures.
+      Record a stable tag capped at 80 chars ("HTTP 403", "Readability returned empty"), never a
+      stack trace.
+- [ ] The four cleaners as separate pure functions over the fragment (`linkedom`): duplicate title,
+      missing intro, page furniture, hero image. Furniture removal runs **at render time**, so a new
+      rule fixes already-cached articles without a re-sync.
+- [ ] Store beside, never over: `article_text` keeps both sources, a derived accessor picks
+      `extracted ?? instapaper`, and settings gets a "show original" toggle for free.
+- [ ] Gating: run only when `get_text` output trips the heuristic. Retry backoff (one week) **in
+      code, not in the query**. Single-flight try-lock around the pass. An explicit "fetch full
+      content" action bypasses every gate.
+
+**Done when:** a soft-paywalled article that Instapaper returned a stub for renders in full, and a
+hard-paywalled one fails with a legible tag rather than an exception.
+
+### 7b — Manual site sessions
+
+- [ ] KV binding + `lib/secrets.ts`: AES-GCM under `STASH_ENCRYPTION_KEY`, corrupt-blob recovery
+      deletes and recreates rather than crashing. **Separate namespace from anything Instapaper.**
+- [ ] `lib/cookie-domain.ts`: RFC 6265 matching — `U == H` or `U` ends with `.H`. **Unit-test this
+      hard** before it has any consumer: spoofed suffixes (`fakenytimes.com` vs `nytimes.com`),
+      leading dots, case, values containing `=`. A bare `endsWith` here is a vulnerability.
+- [ ] `api/sessions`: POST a host + `Cookie:` header value, DELETE one host, GET the host list.
+      Only `name=value` pairs are stored; everything else is dropped. **The cookie values are never
+      returned to the client** — GET lists hosts and nothing more.
+- [ ] Settings UI: add a session (host + paste), per-host sign-out, list of signed-in hosts, and a
+      line explaining where to get the value (devtools → Network → copy the `Cookie` request
+      header). Note plainly that this is a desktop-only step that benefits every device.
+- [ ] Attach the jar to the extractor. With an empty store this changes nothing at the wire level —
+      the safe one-line change SanFeedBin's build order relies on.
+- [ ] The expired-session diagnostic: extraction succeeded, output still trips the heuristic, and
+      cookies were sent for that host → surface "session may have expired" with a re-paste action.
+      **Do not auto-clear** — one bad extraction is not proof a session is dead.
+
+**Done when:** pasting a session for a publisher you subscribe to turns one of its stub articles
+into a full one, and clearing that session returns it to a stub.
+
+### 7c — Browser extension (optional, deferred)
+
+One-click cookie capture, the real equivalent of the Android WebView flow. Separate deliverable,
+own store review. Build only if the paste step is what stops you using Stash.
+
+---
+
+## Phase 8 — Offline and PWA polish
 
 - [ ] Service worker: precache the app shell; runtime-cache article images.
 - [ ] Offline reads work from the IndexedDB cache with no network.
@@ -269,7 +354,7 @@ article with no network.
 
 ---
 
-## Phase 8 — Settings, hardening, ship
+## Phase 9 — Settings, hardening, ship
 
 - [ ] Settings: connection status, appearance/theme, cache size, clear cache.
 - [ ] Error surfaces: an expired or revoked Instapaper token prompts to re-run `connect`, rather
@@ -282,28 +367,31 @@ article with no network.
 
 ---
 
-## Open questions and blockers
+## Open questions
 
-1. **⚠ Instapaper Full API credentials** — outstanding, and the gate on everything past Phase 2.
-   See Phase 0.
-2. **⚠ The Sanfeedbin extraction method.** I have no access to that project — it is local to your
-   machine and not on GitHub, and I can't read your other chats. To port it, paste the relevant
-   source files (the fetch/extraction path: request headers used, HTML parsing, readability step,
-   and any per-site special-casing) or an export of that conversation. Until then Phase 6's
-   fallback is stubbed. If it turns out to be plain Readability-on-raw-HTML, that is quick; if it
-   carries per-site rules, they'll need porting one at a time.
-3. **Extraction posture.** Worth a deliberate choice, since it shapes the code: re-parsing the HTML
-   a server already sent us (getting under a client-side paywall overlay) is a different thing from
-   spoofing a crawler user-agent or routing through an archive mirror to obtain content the site
-   withheld. The former is comfortable; the latter is a publisher-ToS question you should decide
-   knowingly rather than inherit by accident. Tell me which line you want and I'll build to it.
+Both prior blockers are cleared: the Instapaper credentials are in hand, and the extraction method
+is specified in [`docs/EXTRACTION.md`](docs/EXTRACTION.md). What remains is one confirmation and one
+preference.
+
+1. **xAuth on the consumer key.** Granted per-application and separately from Full API access, and
+   it fails only at the token exchange. The first `npm run connect` run confirms it; if it 401s,
+   that is a request back to Instapaper, not a bug in our signing (assuming the RFC 5849 test vector
+   passes first).
+2. **How far to take the cookie capture.** The plan builds 7a and 7b and defers the extension. If
+   pasting a `Cookie:` header per publisher sounds like something you'd never actually do, say so
+   and the extension moves up — it's the difference between the feature being used and being
+   theoretically present.
 
 ## Risks
 
-- **Instapaper API access is the single point of failure.** No credentials, no app. It is outside
-  our control and Instapaper has changed hands more than once — confirm the Full API is still being
-  issued before investing in Phases 3–6.
-- **Column pagination on mobile Safari** is the biggest engineering risk after that. The
+- **Instapaper remains the single point of failure.** The credentials are in hand, but the Full API
+  is still a third-party dependency on a service that has changed hands more than once. Nothing to
+  do about it beyond keeping the extraction path independent of Instapaper, which it is.
+- **Secrets in the wrong place.** The consumer key/secret, the OAuth token, the passphrase and the
+  encryption key are all env vars, and the deploy step verifies none of them reach the client
+  bundle. Anything that ends up in a chat, an issue or a commit should be reissued rather than
+  reasoned about.
+- **Column pagination on mobile Safari** is the biggest engineering risk. The
   deterministic measurement approach is right, but dynamic viewport height and touch momentum will
   need iteration. Fallback if it proves untenable on phones: vertical scroll on narrow viewports,
   paginated columns on tablet and desktop. Don't reach for this early — the spec is explicit that
@@ -313,9 +401,18 @@ article with no network.
 - **A public URL in front of a destructive API.** The passphrase gate is the only thing between the
   internet and an account someone can delete bookmarks from. It needs to be in place before the
   first deploy, not after — get Phase 2's guard right.
+- **Site cookies raise the stakes on that gate.** Once Phase 7b lands, the KV store holds live
+  sessions for the user's paid publisher accounts. A weak passphrase, a cookie-value read path that
+  should never have existed, or a domain-match bug that sends one publisher's session to another
+  host all turn a reading app into a credential leak. The domain matcher gets adversarial unit tests
+  before it has a single caller, and cookie values never travel back to the client.
 - **Third-party fetching at scale.** A first sync on a large account fires a lot of outbound
   requests. Bounded concurrency plus the permanent negative cache keeps it to a one-time cost, but
   get the guard rails in before running it against a real account.
-- **No cross-device cache.** Deliberate, but it means each new device re-syncs and re-resolves
-  images from scratch. If that becomes annoying, the smallest fix is a KV store on the hosting
-  platform for `image_cache` only — not a return to a full backend.
+- **No cross-device cache**, beyond the shared image results. Deliberate, but it means each new
+  device re-syncs bookmarks and re-fetches text from scratch. Cheap, and not worth a backend.
+- **Extraction has a hard ceiling.** JavaScript-rendered paywalls, anti-bot challenges and
+  token-bearer content APIs are all out of reach for an HTML parser, cookies or not. The fallback
+  for those is opening the article in a browser, not a cleverer extractor — and it's worth measuring
+  per article rather than per domain, since free and premium pieces from the same publisher often
+  behave differently.
