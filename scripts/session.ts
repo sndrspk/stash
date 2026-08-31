@@ -15,13 +15,14 @@
  * in, only names come out.
  */
 
-import { cookieNames, mergeCookieHeaders, normalizeHost, parseCookieHeader } from '../src/lib/cookies.js';
+import { coerceHost, cookieNames, mergeCookieHeaders, parseCookieHeader } from '../src/lib/cookies.js';
 import { DEFAULT_STORE_PATHS, loadSessionStore, saveSessionStore, SessionStoreError } from '../src/lib/session-store.js';
 
 const BOLD = '[1m';
 const DIM = '[2m';
 const RED = '[31m';
 const GREEN = '[32m';
+const YELLOW = "\u001b[33m";
 const OFF = '[0m';
 
 const USAGE = `usage:
@@ -60,6 +61,12 @@ async function main(): Promise<number> {
   const store = loaded.store;
   const target = file ?? loaded.path ?? DEFAULT_STORE_PATHS[0];
 
+  // A store we could not read is a warning, never a blocker — least of all for the
+  // command that exists to write a good one.
+  for (const problem of loaded.problems) {
+    console.error(`${YELLOW}${problem}${OFF}\n`);
+  }
+
   if (command === 'list') {
     const hosts = Object.keys(store).sort();
     if (hosts.length === 0) {
@@ -78,9 +85,12 @@ async function main(): Promise<number> {
     console.error(`${RED}${command} needs a host.${OFF}\n\n${USAGE}`);
     return 2;
   }
-  const host = normalizeHost(hostArg);
-  if (host === '') {
-    console.error(`${RED}"${hostArg}" is not a host.${OFF}`);
+  const host = coerceHost(hostArg);
+  if (host === null) {
+    console.error(`${RED}"${hostArg}" is not a hostname.${OFF}`);
+    console.error(`${DIM}Pass the host, or any URL on it:${OFF}`);
+    console.error(`${DIM}  npm run session -- ${command} www.nieuwsblad.be${OFF}`);
+    console.error(`${DIM}  npm run session -- ${command} https://www.nieuwsblad.be/cnt/article${OFF}`);
     return 2;
   }
 
@@ -119,6 +129,9 @@ async function main(): Promise<number> {
   console.log(`${GREEN}Stored${OFF} ${names.length} cookies for ${BOLD}${host}${OFF} in ${target}.`);
   console.log(`${DIM}${names.join(', ')}${OFF}`);
   console.log('');
+  if (loaded.problems.length > 0) {
+    console.log(`${DIM}The unreadable file above is no longer used — you can delete it.${OFF}`);
+  }
   console.log(`Now try:  npm run probe -- https://${host}/some-paywalled-article`);
   return 0;
 }

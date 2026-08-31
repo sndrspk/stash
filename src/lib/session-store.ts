@@ -70,10 +70,10 @@ function parseSessionJson(text: string, path: string): SessionStore {
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     throw new SessionStoreError(
-      `${path} is not valid JSON (${detail}).\n` +
+      `Ignoring ${path}: it is not valid JSON (${detail}).\n` +
         'A pasted cookie header usually breaks JSON — an embedded newline, a quote, a backslash.\n' +
-        'Use the line-based format instead, which has none of those problems:\n' +
-        '  npm run session -- add <host>',
+        `Sessions now live in ${DEFAULT_STORE_PATHS[0]}, which has none of those problems, so this ` +
+        `file is no longer used.\nOnce your sessions are stored there you can delete ${path}.`,
     );
   }
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
@@ -97,16 +97,25 @@ export function parseSessionStore(text: string, path: string): SessionStore {
 
 export interface LoadedStore {
   store: SessionStore;
-  /** The file actually read, or null when none of the candidates existed. */
+  /** The file actually read, or null when none of the candidates could be used. */
   path: string | null;
+  /** Files that exist but could not be read or parsed. Warn; never fail on these. */
+  problems: string[];
 }
 
 /**
- * Load the first store that exists. A missing file is not an error — running the probe
- * with no sessions at all is the expected first step.
+ * Load the first usable store. A missing file is not an error — running the probe with
+ * no sessions at all is the expected first step.
+ *
+ * A file that exists but cannot be parsed is also not fatal. SanFeedBin's storage layer
+ * recovers from a corrupt blob rather than crashing, and the same applies here for a
+ * sharper reason: a store too broken to read must not block the very command that would
+ * write a good one. So a bad candidate is reported and skipped, never thrown — and never
+ * deleted or overwritten either, since it is the caller's data to keep.
  */
 export async function loadSessionStore(explicitPath?: string | null): Promise<LoadedStore> {
   const candidates = explicitPath !== undefined && explicitPath !== null ? [explicitPath] : [...DEFAULT_STORE_PATHS];
+  const problems: string[] = [];
 
   for (const path of candidates) {
     let text: string;
@@ -114,12 +123,17 @@ export async function loadSessionStore(explicitPath?: string | null): Promise<Lo
       text = await readFile(path, 'utf8');
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue;
-      throw new SessionStoreError(`Could not read ${path}: ${(error as Error).message}`);
+      problems.push(`Could not read ${path}: ${(error as Error).message}`);
+      continue;
     }
-    return { store: parseSessionStore(text, path), path };
+    try {
+      return { store: parseSessionStore(text, path), path, problems };
+    } catch (error) {
+      problems.push(error instanceof SessionStoreError ? error.message : String(error));
+    }
   }
 
-  return { store: {}, path: null };
+  return { store: {}, path: null, problems };
 }
 
 export async function saveSessionStore(store: SessionStore, path: string): Promise<void> {

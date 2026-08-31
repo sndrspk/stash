@@ -1,5 +1,14 @@
+import { mkdtemp, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { formatSessionText, parseSessionStore, parseSessionText, SessionStoreError } from '../src/lib/session-store.js';
+import {
+  formatSessionText,
+  loadSessionStore,
+  parseSessionStore,
+  parseSessionText,
+  SessionStoreError,
+} from '../src/lib/session-store.js';
 
 describe('parseSessionText', () => {
   it('reads a whitespace-separated host and header', () => {
@@ -50,7 +59,7 @@ describe('parseSessionStore', () => {
   it('explains itself when a pasted header has broken the JSON', () => {
     const broken = '{"a.test":"x=1\ny=2"}';
     expect(() => parseSessionStore(broken, 'sessions.json')).toThrow(SessionStoreError);
-    expect(() => parseSessionStore(broken, 'sessions.json')).toThrow(/npm run session/);
+    expect(() => parseSessionStore(broken, 'sessions.json')).toThrow(/sessions\.txt/);
   });
 
   it('rejects a JSON array or a non-string value', () => {
@@ -61,5 +70,39 @@ describe('parseSessionStore', () => {
   it('strips control characters that survived the file format', () => {
     const store = parseSessionStore('{"a.test":"x=1\\ty=2"}', 'sessions.json');
     expect(store['a.test']).toBe('x=1 y=2');
+  });
+});
+
+describe('loadSessionStore', () => {
+  const tmp = async (): Promise<string> => mkdtemp(join(tmpdir(), 'stash-store-'));
+
+  it('returns an empty store when nothing exists', async () => {
+    const dir = await tmp();
+    const loaded = await loadSessionStore(join(dir, 'sessions.txt'));
+    expect(loaded).toEqual({ store: {}, path: null, problems: [] });
+  });
+
+  // The deadlock this replaced: a corrupt store blocked the command that would fix it.
+  it('reports an unreadable store as a problem rather than throwing', async () => {
+    const dir = await tmp();
+    const path = join(dir, 'sessions.json');
+    await writeFile(path, '{"a.test":"x=1\ny=2"}', 'utf8');
+
+    const loaded = await loadSessionStore(path);
+    expect(loaded.store).toEqual({});
+    expect(loaded.path).toBeNull();
+    expect(loaded.problems).toHaveLength(1);
+    expect(loaded.problems[0]).toMatch(/not valid JSON/);
+  });
+
+  it('reads a good store with no problems', async () => {
+    const dir = await tmp();
+    const path = join(dir, 'sessions.txt');
+    await writeFile(path, 'a.test x=1\n', 'utf8');
+
+    const loaded = await loadSessionStore(path);
+    expect(loaded.store).toEqual({ 'a.test': 'x=1' });
+    expect(loaded.path).toBe(path);
+    expect(loaded.problems).toEqual([]);
   });
 });

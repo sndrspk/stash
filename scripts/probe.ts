@@ -195,6 +195,10 @@ async function main(): Promise<number> {
   const cookie = cookieHeaderFor(target, loaded.store);
   const storeLabel = loaded.path ?? `no ${DEFAULT_STORE_PATHS[0]}`;
 
+  for (const problem of loaded.problems) {
+    console.error(`${YELLOW}${problem}${OFF}\n`);
+  }
+
   console.log('');
   console.log(`${BOLD}${target.hostname}${OFF} ${DIM}${target.pathname}${OFF}`);
   if (cookie === null) {

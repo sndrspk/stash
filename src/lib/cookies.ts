@@ -20,6 +20,35 @@ export function normalizeHost(host: string): string {
 
 const IPV4 = /^\d{1,3}(\.\d{1,3}){3}$/;
 
+/** A hostname: dot-separated labels, or an IP literal. No scheme, path, or punctuation. */
+const HOSTNAME = /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$/;
+
+/**
+ * Turn what someone typed into a hostname, or return null.
+ *
+ * Accepts a bare host or any URL containing one, because pasting the article URL you were
+ * just looking at is the obvious thing to do. Rejects anything else rather than storing a
+ * session under a key no request will ever match — a typo would otherwise fail silently,
+ * which is the worst possible outcome for a credential store.
+ */
+export function coerceHost(input: string): string | null {
+  const raw = stripControlChars(input).trim();
+  if (raw === '') return null;
+
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(raw)) {
+    try {
+      const host = normalizeHost(new URL(raw).hostname);
+      return HOSTNAME.test(host) ? host : null;
+    } catch {
+      return null;
+    }
+  }
+
+  // A bare host, possibly with a path or port stuck to it.
+  const host = normalizeHost(raw.split('/')[0]?.split('?')[0]?.split('#')[0]?.replace(/:\d+$/, '') ?? '');
+  return HOSTNAME.test(host) ? host : null;
+}
+
 /**
  * Collapse CR, LF, TAB and any other C0/C1 control character to a single space.
  *
