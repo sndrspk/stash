@@ -12,7 +12,7 @@
  *   const refusal = requireSession(request);
  *   if (refusal) return refusal;
  */
-import { readSessionCookie, verifySession } from './session';
+import { readSessionCookie, verifySession } from './session.js';
 
 /** Config errors are the operator's problem, and must never read as auth failures. */
 export class ConfigError extends Error {}

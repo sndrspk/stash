@@ -9,8 +9,8 @@
  * Unlike `/api/health`, which says only that the deployment is up, this one talks
  * to Instapaper and so must never be reachable without a session.
  */
-import { ConfigError, requireEnv, requireSession } from '../src/lib/guard';
-import { InstapaperError, credentialsFromEnv, verifyCredentials } from '../src/lib/instapaper';
+import { ConfigError, requireEnv, requireSession } from '../src/lib/guard.js';
+import { InstapaperError, credentialsFromEnv, verifyCredentials } from '../src/lib/instapaper.js';
 
 const json = (body: unknown, status: number) =>
   new Response(JSON.stringify(body), {
