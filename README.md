@@ -6,6 +6,10 @@ Stash is a web port of a native macOS app built with Glaze. It is a client for I
 reads, archives, and deletes bookmarks you already have there. It never creates bookmarks and is
 not affiliated with or endorsed by Instapaper.
 
+**Stash is single-tenant by design.** There is no sign-up and no shared backend: you deploy your
+own instance, connect it to your own Instapaper account, and it serves exactly you. If you want to
+use it, fork or clone this repo and deploy it yourself.
+
 > **Status: pre-implementation.** This repository currently contains the design spec and the
 > work plan only. No application code has been written yet.
 
@@ -20,39 +24,56 @@ not affiliated with or endorsed by Instapaper.
   size, line height, column width).
 - **Sync.** Archive and delete hit the Instapaper API, not just local state. Bookmarks added
   elsewhere (phone, browser extension) appear on the next refresh.
+- **Better text than Instapaper alone.** Instapaper's own extractor gives up on some paywalled or
+  script-heavy pages. When it returns nothing usable, Stash re-extracts the article itself.
 
-The full product and technical spec lives in [`docs/DESIGN_SPEC.md`](docs/DESIGN_SPEC.md).
+The full product and technical spec lives in [`docs/DESIGN_SPEC.md`](docs/DESIGN_SPEC.md); where
+the implementation deliberately departs from it, [`WORKPLAN.md`](WORKPLAN.md) records why.
 
-## Planned stack
+## Architecture
 
-| Layer | Choice |
-| --- | --- |
-| App | Vite + React + TypeScript, installable PWA |
-| Backend | Supabase — Postgres (RLS), Auth, Edge Functions (Deno) |
-| Instapaper access | OAuth 1.0a xAuth, performed **server-side** in an Edge Function |
-| Cache | Supabase tables (cross-device) with an IndexedDB layer on top for offline reads |
+```
+┌─────────────────────────┐        ┌──────────────────────────┐       ┌──────────────┐
+│  PWA (Vite + React)     │        │  Serverless functions    │       │  Instapaper  │
+│                         │ ─────► │  (same deployment)       │ ────► │  Full API    │
+│  IndexedDB cache        │        │                          │       └──────────────┘
+│  no credentials         │        │  OAuth token from env    │       ┌──────────────┐
+└─────────────────────────┘        │  article extraction      │ ────► │  Source URLs │
+                                   └──────────────────────────┘       └──────────────┘
+```
 
-Everything that talks to Instapaper or to third-party sites goes through an Edge Function: browsers
-cannot call those origins directly (no CORS), and the Instapaper token must never reach the client.
+- **No database and no user accounts.** The Instapaper OAuth token lives in the deployment's
+  environment variables and never reaches the browser.
+- **The serverless layer is not optional.** Instapaper's API and third-party sites don't send CORS
+  headers, so every outbound call is proxied. It is also the only place the token exists.
+- **Cache is per-device**, in IndexedDB. A second device re-syncs rather than sharing state — the
+  cost of having no backend, and a fair trade for a personal app.
+- **Access is gated by a passphrase** you set at deploy time. Without it, anyone who finds the URL
+  can read and delete your Instapaper queue.
+
+Planned stack: Vite + React + TypeScript, deployed to Vercel (static PWA + Node serverless
+functions). See [WORKPLAN.md](WORKPLAN.md#architecture-decided) for why, and what changes if you'd
+rather use Cloudflare or Netlify.
 
 ## Repository layout
 
 ```
 docs/DESIGN_SPEC.md   Product + technical spec (source of truth)
-WORKPLAN.md           Phased implementation plan, open questions, risks
+WORKPLAN.md           Phased implementation plan, decisions, open questions, risks
 LICENSE               MIT
 ```
 
-Application code, migrations and Edge Functions land as the phases in `WORKPLAN.md` are completed.
+Application code, functions and tooling land as the phases in `WORKPLAN.md` are completed.
 
 ## Getting started
 
-Nothing to run yet. Once Phase 1 lands, this section will cover prerequisites (Node, Supabase CLI),
-the environment variables required, and the local dev commands.
+Nothing to run yet. Once Phase 1 lands, this section will cover prerequisites, the one-time
+`npm run connect` token exchange, the environment variables to set, and the deploy step.
 
-Building Stash against a real account requires Instapaper **Full API** credentials (a consumer key
-and secret), which Instapaper issues on request. See [Open questions](WORKPLAN.md#open-questions) —
-this is the one dependency that is not in our hands.
+Running Stash against a real account requires Instapaper **Full API** credentials (a consumer key
+and secret), which Instapaper issues on request. See
+[Open questions](WORKPLAN.md#open-questions-and-blockers) — this is the one dependency that is not
+in our hands.
 
 ## Constraints we hold ourselves to
 
@@ -62,8 +83,8 @@ These come from Instapaper's API terms and are treated as non-negotiable through
   resulting OAuth token/secret is persisted.
 - No bookmark is ever archived or deleted except by an explicit, per-item user click. No bulk
   actions, no automated cleanup.
-- Never scrape instapaper.com. Image resolution only ever fetches a bookmark's own original source
-  URL.
+- Never scrape instapaper.com. Image resolution and text re-extraction only ever fetch a
+  bookmark's own original source URL.
 - The app never creates bookmarks.
 - "Instapaper" is not used as this app's name or logo — Stash describes itself as a client *for*
   Instapaper.
