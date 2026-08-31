@@ -119,6 +119,8 @@ because it answers the riskiest product question first.
 
 ## Getting started
 
+Node 20.19+ or 22.13+ (what Vite and ESLint require; `engines` enforces it).
+
 ```sh
 npm install
 npm run dev      # Vite alone — fast, but /api 404s
