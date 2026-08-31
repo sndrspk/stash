@@ -13,7 +13,7 @@
  * malformed, 401 means it was understood and rejected. Only the second one is
  * about credentials or permissions.
  */
-import { signRequest, type Param } from './oauth';
+import { signRequest, type Param } from './oauth.js';
 
 export const ACCESS_TOKEN_URL = 'https://www.instapaper.com/api/1/oauth/access_token';
 

@@ -5,10 +5,10 @@
  * POST { passphrase } -> 204 + Set-Cookie, or 401.
  * DELETE               -> 204 + cleared cookie (sign out).
  */
-import { requireEnv } from '../src/lib/guard';
-import { secretsMatch } from '../src/lib/oauth';
-import { clientKey, rateLimit } from '../src/lib/rate-limit';
-import { clearedSessionCookie, mintSession, sessionCookie } from '../src/lib/session';
+import { requireEnv } from '../src/lib/guard.js';
+import { secretsMatch } from '../src/lib/oauth.js';
+import { clientKey, rateLimit } from '../src/lib/rate-limit.js';
+import { clearedSessionCookie, mintSession, sessionCookie } from '../src/lib/session.js';
 
 /** Five attempts a minute: invisible to a person typing, tedious for a script. */
 const ATTEMPT_LIMIT = 5;

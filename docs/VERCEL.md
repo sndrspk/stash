@@ -69,6 +69,30 @@ there is no second origin.
 `npm run dev` runs Vite alone — faster, but functions 404. Use it for UI work, `vercel dev`
 for anything touching `/api`.
 
+## Relative imports in functions need `.js`
+
+`package.json` declares `"type": "module"`, so the deployed functions run as real Node
+ESM — where an extensionless relative import does not resolve. Every relative import
+under `api/` and `src/lib/` therefore ends in `.js`, even though the file on disk is
+`.ts`. That is the standard TypeScript-to-ESM convention, and TypeScript resolves it
+correctly.
+
+This is worth its own section because **nothing local catches it**. Vite resolves
+extensionless imports for the client, Vitest resolves them for the test suite, and
+`vercel dev` resolves them too. Only the built deployment fails, and it fails as:
+
+```
+500: INTERNAL_SERVER_ERROR
+Code: FUNCTION_INVOCATION_FAILED
+```
+
+— which says nothing about imports. `/api/status` shipped this way once while
+`/api/health`, which imports nothing at all, kept returning `{"ok":true}` and made the
+deployment look healthy.
+
+`test/module-resolution.test.ts` asserts the rule across both directories, so the failure
+now surfaces in CI instead of in production.
+
 ## `Secure` cookies and `localhost` vs `127.0.0.1`
 
 The session cookie is always `Secure`. Browsers make an exception that lets a `Secure`
