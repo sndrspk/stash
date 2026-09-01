@@ -185,14 +185,21 @@ function enforceUrlPolicy(node: Element): void {
     if (value !== null && !SAFE_URL.test(value.trim())) node.removeAttribute(attribute);
   }
 
-  // A srcset is a list, and one bad candidate spoils it: the browser is free to
-  // choose that one. Dropped whole rather than filtered, since `src` remains.
+  /*
+   * A srcset is a list, and the browser is free to choose any candidate — so one
+   * bad entry is as dangerous as a bad `src`. Filtered rather than dropped whole,
+   * which is the safer *and* the more useful choice: a `<picture>` whose `<source>`
+   * lost its whole srcset contributes nothing, and if that was the article's lead
+   * photograph the reader gets a blank where it should be.
+   */
   const srcset = node.getAttribute('srcset');
   if (srcset !== null) {
-    const candidates = srcset.split(',').map((entry) => entry.trim().split(/\s+/)[0] ?? '');
-    if (!candidates.every((candidate) => SAFE_URL.test(candidate))) {
-      node.removeAttribute('srcset');
-    }
+    const kept = srcset
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter((entry) => SAFE_URL.test(entry.split(/\s+/)[0] ?? ''));
+    if (kept.length === 0) node.removeAttribute('srcset');
+    else node.setAttribute('srcset', kept.join(', '));
   }
 
   if (node.tagName === 'A' && node.hasAttribute('href')) {

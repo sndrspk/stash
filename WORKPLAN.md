@@ -573,7 +573,8 @@ real iteration in the native app, and reverting to naive CSS multi-column will r
       CSS preference; the first column snaps back to `scrollLeft: 0` and the last snaps to the true
       end.
 - [x] Typography preferences: font family, size, line height, column width (Narrow 22em / Medium
-      34em / Wide 56em, default Medium). Persisted in IndexedDB — a new `settings` store, at
+      34em / Wide 56em, default Medium), **and a reading mode** — see the departure below.
+      Persisted in IndexedDB — a new `settings` store, at
       `DB_VERSION` 2 with a stepwise upgrade, since a browser cache can be on any version the app
       has ever shipped. Normalised field by field on read, so a preset renamed in a later release
       degrades to the default rather than leaving an unreadable column with no way back.
@@ -650,12 +651,65 @@ which puts the viewport's right edge *inside* the final column and cuts the clos
 with the trailing whitespace the explicit width exists to produce sitting just off screen. Anything
 within half a stride of the end now goes to the end.
 
-**Not verified: a real phone.** Everything above at 390×844 is Chromium emulating a phone, which is
-not the same thing — the mobile caveat in this phase is specifically about iOS Safari's address bar
-collapsing, and no emulator reproduces that. The code is written for it (`100dvh`, a debounced
-re-measure, `visualViewport` rather than `window.innerHeight`), but it is written against the
-described behaviour rather than the observed one. Worth half an hour on an actual iPhone before
-Phase 8 calls the PWA done.
+### What a real phone found
+
+The paragraph that used to sit here said the 390×844 run was Chromium emulating a phone and that an
+actual iPhone was still worth half an hour. It was, and it found four bugs — every one of them
+invisible to the checks that were passing.
+
+**A column was wider than the screen.** The presets are absolute: Medium is 34em, which at 18px is
+612px, on a 390px phone. Nothing clamped it, so the reader saw **59% of a column** and every line ran
+off the right edge. The layout was correct by every measurement being taken — the 0px check passed,
+nothing bled — and completely unreadable. *Geometry being self-consistent is not the same as it
+being legible*, and no amount of the former proves the latter.
+
+**The article had no horizontal padding at all on a phone**, because the rule setting it used
+`var(--space-5)`, which is not on the scale. One undefined token voids the whole shorthand, silently.
+
+**There was no headline anywhere.** `get_text` returns the article body and nothing else, so the
+reading view opened straight into the first paragraph — or, worse, into the lead photograph with no
+indication of what the article was. The bookmark's own title now leads the first column.
+
+**The bar had four controls, no room, and no safe-area insets**, which put Delete under the notch.
+
+The check that would have caught the first one is now in the run — *a whole column fits on the
+screen* — along with checks for the bar, the padding and the headline. Two smaller things fell out
+of the fixes: on a phone the column gutter is set equal to the two side paddings, which is what makes
+a page turn exactly one screen rather than one screen plus a gutter; and the position restore moved
+to immediately after the temporary single-column reflow, because that reflow makes the browser clamp
+`scrollLeft` to 0 and a measurement that concluded "nothing changed" was returning early and leaving
+the reader at the top of the article.
+
+### Departure: a reading mode, defaulting by device
+
+Spec §4 is emphatic that the article body is *not* a single vertically-scrolling column, and the
+porting notes anticipated mobile explicitly — keep the paged model, change the input to touch-swipe.
+That still stands, and once the column is clamped a phone gets exactly one column per screen, which
+is the Kindle and Apple Books model and reads well.
+
+But the strongest argument for scrolling on a phone was never width. It is that iOS Safari's address
+bar collapses mid-read, changing the height a column has to fill: a paged layout has to fight that
+and a scrolling one is simply immune. So rather than choose for the reader, the reading view now
+offers both — `Paged` and `Scrolling`, in the same panel as the typography — which is what every
+serious e-reader does.
+
+The stored preference is **three**-valued: `auto`, `paged`, `scrolling`, defaulting to `auto`. That
+is deliberate rather than incidental. A reader who has never opened the panel should get the right
+mode for whatever they are holding and keep getting it when they rotate the device; a reader who has
+chosen should get their choice everywhere. `auto` resolves to scrolling only on a **touch device
+under 800px** — a narrow desktop window stays paged, because dragging a window edge is not the same
+as picking up a phone.
+
+Scrolling mode is mostly the column machinery switched off: the typography, the media clamp, the
+widow and orphan rules, the headline and the sanitising are all shared. The one wrinkle worth
+knowing is that `useColumnLayout` writes its geometry as *inline* styles, which outlive it — so
+`.articleScrolling` overrides them with `!important`, which is the correct tool here rather than a
+shortcut, because an inline style beats any selector and no amount of specificity takes an element
+back from one.
+
+**Still not verified: iOS Safari itself.** The mode switch is exactly the mitigation for the
+address-bar problem, and it is chosen by default on phones — but "scrolling avoids the problem" is
+still reasoning rather than observation.
 
 ---
 

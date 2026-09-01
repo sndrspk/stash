@@ -25,6 +25,25 @@
  * approach is a browser assertion in the Phase 6 run.
  */
 
+/**
+ * The reader's preferred column width, reduced to what the screen can show.
+ *
+ * The presets are absolute — Medium is 34em, which at 18px is 612px — and a phone is
+ * 390px wide. Unclamped, that produces a layout which is *correct by every
+ * measurement we take* and completely unreadable: the 0px check passes, nothing
+ * bleeds, and every line of text runs off the right-hand edge because the reader can
+ * only ever see 60% of a column. Geometry being self-consistent is not the same as
+ * it being legible, and this function is the difference.
+ *
+ * `available` is the viewport minus the article's own horizontal padding, so a
+ * clamped column plus its padding is exactly one screen.
+ */
+export function fitColumnWidth(preferred: number, available: number): number {
+  if (!Number.isFinite(available) || available <= 0) return preferred;
+  if (!Number.isFinite(preferred) || preferred <= 0) return available;
+  return Math.min(preferred, available);
+}
+
 export interface ColumnInputs {
   /** Height of the content rendered as one column, in px. */
   naturalHeight: number;
