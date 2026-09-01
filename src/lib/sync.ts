@@ -28,39 +28,89 @@ const str = (value: unknown): string => (typeof value === 'string' ? value : '')
 const num = (value: unknown): number =>
   typeof value === 'number' && Number.isFinite(value) ? value : 0;
 
+/** Entry types a `bookmarks/list` response mixes in that are not bookmarks. */
+const NOT_BOOKMARKS = new Set(['user', 'folder', 'error', 'highlight', 'meta']);
+
 /**
- * Extracts bookmarks from a `bookmarks/list` response.
+ * One bookmark, or null if the entry is not one.
  *
- * The response is a heterogeneous array — user records, folder records and an
- * optional error all share it — so entries are selected by `type` rather than by
- * position. Anything without a usable `bookmark_id` is skipped rather than coerced:
- * a row keyed on 0 or NaN would collide with every other malformed row.
+ * An entry counts as a bookmark when it has a usable `bookmark_id` and does not
+ * declare itself as something else. Requiring `type === 'bookmark'` outright was
+ * too strict: it holds for the array form, where entries are tagged because they
+ * share one list, but not for the object form, where the bookmarks already sit
+ * under their own key and carry no type at all.
+ *
+ * An entry without a usable id is skipped rather than coerced — a row keyed on 0
+ * or NaN would collide with every other malformed row.
+ */
+function toBookmark(item: unknown): RemoteBookmark | null {
+  if (typeof item !== 'object' || item === null) return null;
+  const record = item as Record<string, unknown>;
+
+  if (typeof record.type === 'string' && NOT_BOOKMARKS.has(record.type)) return null;
+
+  const id = record.bookmark_id;
+  // Instapaper sends this as a number, but a string id is cheap to accept and
+  // expensive to have rejected silently.
+  const bookmarkId = typeof id === 'number' ? id : typeof id === 'string' ? Number(id) : NaN;
+  if (!Number.isFinite(bookmarkId) || bookmarkId <= 0) return null;
+
+  return {
+    bookmark_id: bookmarkId,
+    title: str(record.title),
+    url: str(record.url),
+    time: num(record.time),
+    description: str(record.description),
+    hash: str(record.hash),
+  };
+}
+
+/**
+ * Extracts bookmarks from a `bookmarks/list` response, in either shape it comes in.
+ *
+ * **This assumed an array and shipped that way**, which meant every real call
+ * parsed zero bookmarks — the account's unread folder looked empty, both here and
+ * through `api/bookmarks`. Instapaper answered with an **object**, and an earlier
+ * version returned `[]` for anything that was not an array, silently.
+ *
+ * Unit tests did not catch it because they asserted the array form, and the Phase 3
+ * browser run did not catch it because the stub it ran against was written to the
+ * same assumption. Both agreed with each other and neither had met the API.
+ *
+ * So this accepts both, and finds the bookmarks rather than being told where they
+ * are: an array is scanned directly; an object is searched for an array-valued
+ * property, preferring one named `bookmarks` but falling back to any array whose
+ * entries look like bookmarks. That way a key rename upstream degrades into working
+ * rather than into an empty queue.
  */
 export function parseBookmarkList(raw: unknown): RemoteBookmark[] {
-  if (!Array.isArray(raw)) return [];
+  const entries = findEntries(raw);
 
   const out: RemoteBookmark[] = [];
-  for (const item of raw) {
-    if (typeof item !== 'object' || item === null) continue;
-    const record = item as Record<string, unknown>;
-    if (record.type !== 'bookmark') continue;
-
-    const id = record.bookmark_id;
-    // Instapaper sends this as a number, but a string id is cheap to accept and
-    // expensive to have rejected silently.
-    const bookmarkId = typeof id === 'number' ? id : typeof id === 'string' ? Number(id) : NaN;
-    if (!Number.isFinite(bookmarkId) || bookmarkId <= 0) continue;
-
-    out.push({
-      bookmark_id: bookmarkId,
-      title: str(record.title),
-      url: str(record.url),
-      time: num(record.time),
-      description: str(record.description),
-      hash: str(record.hash),
-    });
+  for (const item of entries) {
+    const bookmark = toBookmark(item);
+    if (bookmark) out.push(bookmark);
   }
   return out;
+}
+
+/** The array most likely to hold bookmarks, from either response shape. */
+function findEntries(raw: unknown): unknown[] {
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw !== 'object' || raw === null) return [];
+
+  const record = raw as Record<string, unknown>;
+
+  if (Array.isArray(record.bookmarks)) return record.bookmarks;
+
+  // No `bookmarks` key: take the first array whose entries parse as bookmarks,
+  // rather than the first array of any kind — `highlights` and `delete_ids` are
+  // also arrays and would otherwise win by position.
+  for (const value of Object.values(record)) {
+    if (Array.isArray(value) && value.some((item) => toBookmark(item) !== null)) return value;
+  }
+
+  return [];
 }
 
 /**

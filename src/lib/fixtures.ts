@@ -454,8 +454,28 @@ export function toFixtureBookmark(raw: FixtureBookmark, seed = 0): FixtureBookma
  * echoing them to a terminal, still less to a bug report.
  */
 export function describeResponse(raw: unknown): string {
+  if (raw !== null && typeof raw === 'object' && !Array.isArray(raw)) {
+    /*
+     * Naming the keys matters more than saying "not an array". The first version
+     * reported only the type, which established that the shape was wrong without
+     * saying what it actually was — one more round trip to learn something the
+     * response was already carrying.
+     */
+    const lines = Object.entries(raw as Record<string, unknown>).map(([key, value]) => {
+      const shape = Array.isArray(value)
+        ? `array of ${value.length}`
+        : value === null
+          ? 'null'
+          : typeof value;
+      return `    ${key}: ${shape}`;
+    });
+    return lines.length
+      ? `  Response was an object with keys:\n${lines.join('\n')}`
+      : '  Response was an empty object.';
+  }
+
   if (!Array.isArray(raw)) {
-    return `  Response was ${raw === null ? 'null' : typeof raw}, not an array.`;
+    return `  Response was ${raw === null ? 'null' : typeof raw}, not an array or object.`;
   }
 
   if (raw.length === 0) return '  Response was an empty array.';
