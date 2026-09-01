@@ -9,8 +9,10 @@
  * data — not defensive complexity here.
  *
  * The one exception is `image_cache`, which is expensive to rebuild across hundreds
- * of third-party sites. Phase 4 gives that a server-side copy alongside the local
- * one.
+ * of third-party sites, and which the architecture gives a server-side copy
+ * alongside the local one. That copy waits for the KV store in Phase 7b rather than
+ * standing one up here: until then the cache is per-device, which costs a
+ * re-resolution on a new device and nothing else.
  */
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 
@@ -19,6 +21,16 @@ export const DB_VERSION = 1;
 
 /** Seven days, in milliseconds. The grace period before a purge actually happens. */
 export const PURGE_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * How long a failed image lookup is left alone before it may be tried again.
+ *
+ * A week, which is the interval `docs/EXTRACTION.md` settled on for retrying a
+ * failed URL, and for the same reason: without it, every sync re-attempts every site
+ * that was down once, and a first sync's failures become a standing tax paid by
+ * whoever's server was unlucky that afternoon.
+ */
+export const IMAGE_RETRY_MS = 7 * 24 * 60 * 60 * 1000;
 
 /**
  * Where a bookmark stands.

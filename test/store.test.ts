@@ -4,7 +4,7 @@ import 'fake-indexeddb/auto';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { PURGE_GRACE_MS, closeDb, getDb, textKey } from '../src/lib/db';
+import { IMAGE_RETRY_MS, PURGE_GRACE_MS, closeDb, getDb, textKey } from '../src/lib/db';
 import {
   markLocally,
   needsImageLookup,
@@ -251,5 +251,13 @@ describe('needsImageLookup', () => {
   it('is true after an error, which may be transient', async () => {
     await writeImage(row('error'));
     expect(await needsImageLookup('https://example.com/x')).toBe(true);
+  });
+
+  it('is false while an error is still inside the retry interval', async () => {
+    // "May be retried" and "is retried on every sync" are different rules, and only
+    // the first one is kind to a site that happened to be down when we asked.
+    await writeImage(row('error'));
+    expect(await needsImageLookup('https://example.com/x', NOW + IMAGE_RETRY_MS - 1)).toBe(false);
+    expect(await needsImageLookup('https://example.com/x', NOW + IMAGE_RETRY_MS)).toBe(true);
   });
 });

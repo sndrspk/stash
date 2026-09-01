@@ -1,7 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import { ApiError, useBookmarkAction, useSync, useUnreadBookmarks } from '../lib/queries';
+import {
+  ApiError,
+  useBookmarkAction,
+  useImageCache,
+  useResolveImages,
+  useSync,
+  useUnreadBookmarks,
+} from '../lib/queries';
 import styles from './FrontPage.module.css';
 
 /**
@@ -11,20 +18,36 @@ import styles from './FrontPage.module.css';
  * cards, and the two sidebar lists. This exists to prove the round trip works and
  * that archiving here shows up in Instapaper, which is the phase's "done when". It
  * is deliberately plain rather than a half-built version of the real thing.
+ *
+ * Phase 4 added the thumbnails, for the same reason and with the same restraint:
+ * seeing a resolved `og:image` next to a row is what makes the resolution pass
+ * demonstrable. The slot rules that decide which four articles get a picture are
+ * Phase 5's, not here.
  */
 export function FrontPage() {
   const navigate = useNavigate();
   const { data: bookmarks, isLoading } = useUnreadBookmarks();
+  const { data: images } = useImageCache();
   const sync = useSync();
+  const resolve = useResolveImages();
   const archive = useBookmarkAction('archive');
   const remove = useBookmarkAction('delete');
   const [error, setError] = useState<string | null>(null);
 
   // An expired session is the gate's business, not an error to render.
-  const failed = sync.error ?? archive.error ?? remove.error;
+  const failed = sync.error ?? archive.error ?? remove.error ?? resolve.error;
   useEffect(() => {
     if (failed instanceof ApiError && failed.status === 401) navigate('/unlock', { replace: true });
   }, [failed, navigate]);
+
+  // Resolution runs behind the list rather than in front of it: the articles are
+  // readable the moment they arrive, and the pictures fill in after. It is safe to
+  // fire on every list change because a URL with a cached answer costs no request.
+  const startResolving = resolve.mutate;
+  useEffect(() => {
+    if (!bookmarks || bookmarks.length === 0) return;
+    startResolving(bookmarks.map((bookmark) => bookmark.url));
+  }, [bookmarks, startResolving]);
 
   const busy = sync.isPending || archive.isPending || remove.isPending;
 
@@ -77,6 +100,21 @@ export function FrontPage() {
           <ul className={styles.list}>
             {bookmarks.map((bookmark) => (
               <li key={bookmark.bookmark_id} className={styles.item}>
+                {images?.get(bookmark.url)?.image_url ? (
+                  <img
+                    className={styles.thumb}
+                    src={images.get(bookmark.url)?.image_url ?? ''}
+                    alt=""
+                    loading="lazy"
+                    // A publisher's image that 404s must leave a gap, not a broken
+                    // icon; the row is about the article, not the picture.
+                    onError={(event) => {
+                      event.currentTarget.style.visibility = 'hidden';
+                    }}
+                  />
+                ) : (
+                  <span className={styles.thumbEmpty} aria-hidden="true" />
+                )}
                 <div className={styles.itemText}>
                   <a
                     className={styles.itemTitle}

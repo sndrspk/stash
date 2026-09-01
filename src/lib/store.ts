@@ -7,6 +7,7 @@
  * half-updated.
  */
 import {
+  IMAGE_RETRY_MS,
   PURGE_GRACE_MS,
   getDb,
   textKey,
@@ -234,15 +235,24 @@ export async function writeImage(record: ImageCacheRecord): Promise<void> {
   await (await getDb()).put('image_cache', record);
 }
 
+/** Every resolved image, keyed by article URL, for the front page to read. */
+export async function readAllImages(): Promise<Map<string, ImageCacheRecord>> {
+  const rows = await (await getDb()).getAll('image_cache');
+  return new Map(rows.map((row) => [row.url, row]));
+}
+
 /**
  * Whether an image lookup is worth making.
  *
  * A `none` result is permanent — the page has no usable image and never will within
- * this cache's lifetime — so it must never be retried. `error` may be transient and
- * is allowed through.
+ * this cache's lifetime — so it must never be retried. `error` may be transient, so
+ * it is allowed through, but only once the retry interval has passed: "may be
+ * retried" and "is retried on every sync" are different rules, and only the first
+ * one is kind to a site that was down when we happened to ask.
  */
-export async function needsImageLookup(url: string): Promise<boolean> {
+export async function needsImageLookup(url: string, now = Date.now()): Promise<boolean> {
   const existing = await readImage(url);
   if (!existing) return true;
-  return existing.status === 'error';
+  if (existing.status !== 'error') return false;
+  return now - existing.resolved_at >= IMAGE_RETRY_MS;
 }

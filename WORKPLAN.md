@@ -420,19 +420,71 @@ the newspaper layout.
 
 ## Phase 4 — Image resolution
 
-- [ ] `api/resolve-image`: given a bookmark's source URL, fetch the page, parse `og:image`, fall
-      back to the first `<img>`, return the result (including "none") for the client to cache.
-- [ ] **SSRF guard — required, not optional.** This function fetches an arbitrary URL from our
-      infrastructure. Restrict to `http`/`https`; resolve the host and reject private, loopback,
-      link-local and cloud-metadata addresses; cap redirects and re-validate every hop; cap the
-      response size; set a hard timeout. Refuse any `instapaper.com` host outright — the terms
-      forbid scraping it, and a source URL should never point there.
-- [ ] Bounded concurrency (start at 3–4 in flight) with a per-host delay, so a sync of 200 bookmarks
-      doesn't hammer any one site.
-- [ ] Never re-fetch a URL that already has a cache row, positive or negative.
+- [x] `api/resolve-image`: given a bookmark's source URL, fetch the page, parse `og:image`, fall
+      back to the first `<img>`, return the result (including "none") for the client to cache. The
+      picking is [`src/lib/og-image.ts`](src/lib/og-image.ts), kept pure and network-free because
+      *which* image a page yields is the part with judgement in it — so it is tested against a
+      string rather than a site.
+- [x] **SSRF guard — required, not optional.** Every rule is enforced, and `assertFetchable` is
+      called by the endpoint **before** `guardedFetch` even though `guardedFetch` validates again.
+      The duplication is the point: the refusal for `169.254.169.254` is then a line you can read,
+      not a consequence buried in a helper. The guard itself was already written and tested in
+      Phase 2a; this phase gave `BlockedUrlError` a `permanent` flag, so a timeout is not cached as
+      "this URL can never work".
+- [x] Bounded concurrency (3 in flight) with a per-host delay (1s), in
+      [`src/lib/image-queue.ts`](src/lib/image-queue.ts). The scheduler is **host-aware rather than
+      a plain pool**: concurrency alone is no protection, because a reader who saves twenty articles
+      from one newspaper would send all twenty to that newspaper as fast as three slots allow. When
+      the next item's host is cooling down it looks past it rather than holding a slot, so one busy
+      publisher does not stall the nineteen behind it.
+- [x] Never re-fetch a URL that already has a cache row, positive or negative — with one deliberate
+      refinement, below.
 
 **Done when:** a full sync resolves images once, a second sync resolves zero, and a URL pointing at
 `169.254.169.254` or `localhost` is rejected before any fetch happens.
+
+**Status: done.** Driven in Chromium against the built client with a stubbed deployment: unlock,
+sync, seven articles across three hosts, **seven resolve-image requests and seven distinct URLs**,
+five thumbnails rendered and two articles correctly left without one. Reload and sync again:
+**zero requests**, thumbnails still there from IndexedDB. Evict one cache row by hand and sync:
+exactly one request. 398 unit tests cover the rest.
+
+The rejection clause is asserted literally rather than by inspection: the metadata endpoint,
+`localhost`, loopback, a private address, IPv6 loopback, a `file:` URL and `instapaper.com` each
+return 403 **with the network stubbed and asserted never to have been called** — rejected before any
+fetch, not after one that was then discarded. A redirect from a permitted host to
+`169.254.169.254` is refused on the hop, with exactly one fetch attempted.
+
+Three things are worth naming because they are departures, not details.
+
+**An `error` row is retried after a week, not on the next sync.** "Never re-fetch, positive or
+negative" is the right rule for `ok` and `none`; applied to `error` it would mean a site that was
+down once is never asked again. Retrying it every sync is the opposite failure — a standing tax paid
+by whoever's server was unlucky that afternoon. So `needsImageLookup` holds a failure for the week
+`docs/EXTRACTION.md` already settled on for retrying a failed URL. `none` stays permanent, exactly
+as before.
+
+**The HTTP status carries the third value.** `ok` and `none` are 200 and permanent; a refusal is 403
+and also permanent; everything else — a publisher 403, a 404, a timeout, an unreachable host — is a
+502 or 504 the client may retry. The failure worth designing against is a transient error cached as
+"this page has no image": it is silent, and it lasts. A 401 is neither, and aborts the pass rather
+than writing two hundred error rows because a cookie lapsed.
+
+**Overlapping passes queue rather than skip.** SanFeedBin's single-flight rule is the wrong shape
+here: the second trigger is usually a *different* list, because a sync finishing mid-pass brings new
+bookmarks, and dropping them would leave their pictures unresolved until the app was next opened.
+Serialising costs nothing instead — the queued pass reads the rows the previous one just wrote and
+skips every URL they had in common, which is the same protection single-flight was offering.
+
+**Not done here: the server-side copy of the image cache.** The architecture table gives resolved
+`og:image` URLs a KV copy alongside the IndexedDB one, as the single cache expensive enough to be
+worth sharing between devices. There is no KV store yet — it arrives in Phase 7b with the session
+store — and standing one up for this alone would mean a second implementation to migrate. The cache
+is per-device until then, which costs a re-resolution on a new device and nothing else.
+
+The Phase 3 scaffold now shows a thumbnail per row, for the same reason it exists at all: seeing a
+resolved image next to an article is what makes the pass demonstrable. The slot rules that decide
+*which four* articles get a picture are Phase 5's.
 
 ---
 
