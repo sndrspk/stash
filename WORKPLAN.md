@@ -226,7 +226,9 @@ alone and 404s every function.
 **Done when:** the script yields a working token, an authenticated function call round-trips to
 Instapaper, and an unauthenticated request to any function is refused.
 
-**Status:** the gate is done and verified; the token exchange is built but unrun.
+**Status: done.** The gate is verified and the token exchange has been run against Instapaper —
+`npm run connect` returned a token pair, which settles the one question that was outside our
+control: xAuth *is* enabled on the consumer key. Every capture since has authenticated with it.
 
 Driven in a real browser against the real handlers: an unauthenticated `/api/status` is refused
 401; a wrong passphrase is refused with no cookie set; the right one issues an httpOnly `SameSite=Lax`
@@ -263,33 +265,81 @@ Two findings worth keeping:
   in the body, what is in the header, and that the password is in neither the header nor anything
   that logs one. Confirmed against a local echo server, not just in unit tests.
 
-**Left for the operator, and blocking Phase 2a:** run `npm run connect` once with real credentials.
-That is the only step that can confirm xAuth is enabled on the consumer key — it is granted
-per-application, separately from Full API access, and it fails nowhere else.
+Nothing is left open here.
 
 ---
 
 ## Phase 2a — Fixture capture
 
 Moved out of Phase 0: this is the first point in the plan where a live authenticated call is
-possible. Do it immediately after Phase 2, before Phase 3 — everything from the data layer onward is
-easier to build and much easier to test against real payloads than against invented ones.
+possible. Phase 3 was built ahead of it at the operator's request; nothing was lost, but Phases 5 and
+6 genuinely want real payloads.
 
-- [ ] `scripts/capture.ts` (`npm run capture`): with the Phase 2 credentials in `.env`, pull ~20
-      bookmark records from `bookmarks/list` and write them to `fixtures/bookmarks.json`.
-- [ ] Capture 5–6 `get_text` HTML payloads into `fixtures/text/`, covering the shapes that break
-      things downstream: one short, one very long, one image-heavy, one with wide embeds/tables, one
-      soft-paywalled where `get_text` returns a stub, one hard-paywalled where nothing will help.
-      The last two are what Phase 7's gating is tested against.
-- [ ] **Scrub before committing.** These come from a real account and land in a public repo. Strip
-      or replace anything account-identifying, and check the payloads for tokens or personal data in
-      URLs and query strings. Never commit a fixture you have not read.
-- [ ] Record which shape each file covers, so a later reader knows why each one is there and what
-      breaks if it goes.
+- [x] `scripts/capture.ts` (`npm run capture`): pulls the unread list, fetches `get_text` for a
+      sample (default 20, `--limit` to widen, 700ms apart), measures each article, and writes
+      `fixtures/bookmarks.json`.
+- [x] Picks one article per shape into `fixtures/text/` — soft paywall, hard paywall, image-heavy,
+      wide embeds, very long, short — by **measuring** rather than guessing, reusing the Phase 7a
+      truncation heuristic to identify the stub. The two paywall shapes are claimed first: they are
+      identified by a property nothing else can substitute for, so assigning them last would let a
+      stub be spent as the "short" example and leave the case uncovered. A shape with no candidate
+      is reported as missing rather than padded.
+- [x] **Scrub before committing** — reframed, because the original bullet understated it. Stripping
+      account-identifying fields is not enough. Two things are being published: a record of what
+      someone reads, and publishers' article prose. So the fixtures keep **structure** and discard
+      **content**: every tag, attribute, nesting depth, paragraph count, image dimension and
+      character count survives exactly, and every word is replaced with filler of the same shape.
+      That is not a compromise for what these are for — Phase 5 picks slots by image presence and
+      headline length, Phase 6 computes a column count from rendered height, and neither cares what
+      the words say. Untouched originals go to `fixtures/.raw/` under `--keep-raw`, git-ignored.
+- [x] `fixtures/MANIFEST.md` is generated with the run, recording each file's shape, its
+      measurements, and why that shape is in the set.
 
 **Done when:** `fixtures/` holds the bookmark records and the six text shapes, scrubbed and
 documented, and the truncation tests run against the real stub payload rather than only the
 synthetic one.
+
+**Status: done.** The capture has been run against the real account and the fixtures are committed:
+`bookmarks.json` (20 records) and five articles under `fixtures/text/`. `soft-paywall` found no
+candidate — nothing in the folder was a truncated stub — and the shape is covered by the standing
+pair described above rather than by a captured file.
+
+The written output was audited rather than assumed: every URL across the set resolves to
+`example.com`, all 9,445 letter-runs of prose are filler, and the bookmark records carry only the
+six fields Stash reads.
+
+One finding for Phase 4: **Instapaper's `get_text` strips `srcset` entirely.** There is not one in
+any fixture, and `<source>` elements arrive with no attributes at all. Responsive sources are
+therefore unavailable from cached text — Phase 4 has `img src` and whatever Phase 7's extraction
+fetches directly, and nothing else.
+
+Three bugs the anonymiser had, all found by running it against real markup rather than test strings,
+and all silent:
+
+- **Full documents came back empty.** `get_text` returns a fragment, and linkedom parses a fragment
+  as a sibling of `<body>`; the fix used a container element, which then discarded `<html>`,
+  `<head>` and `<body>` when given a whole page. A captured page anonymised to `<!DOCTYPE html>` and
+  nothing else, with no error.
+- **Relative URLs leaked the publisher.** Only `https?://` values were rewritten, so every
+  `href="/environment/the-real-slug"` kept its section and headline slug.
+- **Fixing that broke file extensions.** Relative paths went through the plain text anonymiser, so
+  `hero-1400.jpg` became `elit-1400.sed` — and Phase 4 branches on what an image URL looks like.
+
+Class names are deliberately **kept**: they are CSS hooks, and Phase 7's furniture-removal rules
+select on them, so anonymising them would make the fixtures useless for the phase most likely to
+need them.
+
+**Regenerating** (done once already; the fixtures are committed):
+
+```sh
+npm run capture -- --dry-run   # see what would be captured, write nothing
+npm run capture                # write the anonymised fixtures
+```
+
+Read `fixtures/MANIFEST.md` and skim the output before committing a fresh set. The rule stands even
+though the output is anonymised: never commit a fixture you have not read. Four bugs in the
+anonymiser were found by looking at its real output and none by re-reading its code, so the check
+that matters is the one that does not assume the anonymiser is correct.
 
 ---
 
@@ -342,9 +392,16 @@ The purge clause is asserted directly: three articles, one archived long ago, on
 one never archived — exactly one row is collected, and the boundary is tested at the deadline as
 well as past it.
 
-**Left for the operator:** press Sync against the real account and confirm that archiving something
-in Stash shows up in Instapaper's own web UI. Everything up to the API call is verified; that this
-is the *right* API call is what a live run confirms.
+**Left for the operator — the one open item in Phases 0–3:** press Sync against the real account
+and confirm that archiving something in Stash shows up in Instapaper's own web UI. Everything up to
+the API call is verified; that this is the *right* API call is what a live run confirms.
+
+This could not have been checked before Phase 2a, and not for the reason it looked like. Sync
+against a real account returned nothing at all, because `parseBookmarkList` assumed
+`bookmarks/list` answers with an array and it answers with an object — a bug that shipped **in this
+phase**, passed every unit test, and passed a browser run against a stub written to the same
+assumption. Both layers agreed with each other and neither had met the API. The parser was fixed in
+Phase 2a; this item is now unblocked.
 
 A plain list stands in for the front page meanwhile, labelled as a Phase 3 scaffold. Phase 5
 replaces it wholesale — it exists so the data layer is demonstrable, not as a half-built version of
