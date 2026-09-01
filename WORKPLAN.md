@@ -554,26 +554,36 @@ decision, not a Phase 5 detail.
 The highest-risk phase. Section 4 of the spec is the specification; it encodes bug fixes that cost
 real iteration in the native app, and reverting to naive CSS multi-column will reintroduce them.
 
-- [ ] `api/text`: `get_text` via the API, cached client-side. **Sanitize the returned HTML**
-      (DOMPurify or equivalent) before injecting it — it is third-party content.
-- [ ] Multi-column horizontal pagination with the **deterministic column count** algorithm:
+- [x] `api/text`: `get_text` via the API, cached client-side — landed in Phase 5, which needed it
+      for excerpts. **Sanitize the returned HTML** before injecting it: done here, in
+      [`src/lib/sanitize.ts`](src/lib/sanitize.ts), which is the only place anything is ever
+      injected. An allowlist rather than a denylist, and it **fails closed** — without a DOM to
+      parse into, DOMPurify reports itself unsupported and returns its input *unchanged*, which at
+      a trust boundary is the worst possible default because it looks like it worked.
+- [x] Multi-column horizontal pagination with the **deterministic column count** algorithm:
       measure natural height at `columnCount: 1`, compute
       `columnCount = ceil(naturalHeight / availableColumnHeight)`, then set an explicit width of
       `columnCount * (columnWidth + gap) - gap + horizontalPadding`. Do not let the browser
-      auto-fit — that is what causes end-of-article text to bleed past the padding.
-- [ ] Re-measure on every image `load` event, on resize, and on any typography preference change.
-- [ ] Snap-to-column after scroll settles (~140ms debounce), measuring the *rendered* column stride
-      from the DOM rather than trusting the CSS value; the first column snaps back to
-      `scrollLeft: 0`.
-- [ ] Typography preferences: font family, size, line height, column width (Narrow 22em / Medium
-      34em / Wide 56em, default Medium). Persisted in IndexedDB, sticky across articles and
-      sessions. (Per-device now — there is no backend to sync them through.)
-- [ ] `--reading-column-width` clamp on `img`, `video`, `iframe`, `table`, `pre` in the body.
-- [ ] `orphans: 2; widows: 2;` on paragraphs and list items.
-- [ ] Touch: swipe left/right for page turns; tap zones as a secondary affordance. Keyboard: arrow
-      keys and space on desktop.
-- [ ] Per-article archive and delete, plus close-to-home.
-- [ ] **Verification test:** on a long article, assert `scrollWidth ===` the content box's computed
+      auto-fit — that is what causes end-of-article text to bleed past the padding. The arithmetic
+      is pure, in [`src/lib/columns.ts`](src/lib/columns.ts); the measurement is
+      [`useColumnLayout`](src/hooks/useColumnLayout.ts). **The formula turned out to be a lower
+      bound, not an answer** — see below.
+- [x] Re-measure on every image `load` event, on resize, and on any typography preference change.
+- [x] Snap-to-column after scroll settles (140ms debounce), from the *rendered* box rather than the
+      CSS preference; the first column snaps back to `scrollLeft: 0` and the last snaps to the true
+      end.
+- [x] Typography preferences: font family, size, line height, column width (Narrow 22em / Medium
+      34em / Wide 56em, default Medium). Persisted in IndexedDB — a new `settings` store, at
+      `DB_VERSION` 2 with a stepwise upgrade, since a browser cache can be on any version the app
+      has ever shipped. Normalised field by field on read, so a preset renamed in a later release
+      degrades to the default rather than leaving an unreadable column with no way back.
+- [x] `--reading-column-width` clamp on `img`, `video`, `iframe`, `table`, `pre` in the body.
+- [x] `orphans: 2; widows: 2;` on paragraphs and list items.
+- [x] Touch: a horizontal drag is the browser's own scroll, with the snap catching where it lands;
+      tap zones on the left and right thirds, behind the article so a link is still a link.
+      Keyboard: arrows, page up/down, space and shift-space, escape to close.
+- [x] Per-article archive and delete, plus close-to-home.
+- [x] **Verification test:** on a long article, assert `scrollWidth ===` the content box's computed
       width exactly. That 0px check is the regression test for the whole approach.
 
 **Mobile caveat to design around:** `100vh` and dynamic viewport height on iOS Safari change as the
@@ -584,6 +594,68 @@ source of "works on desktop, broken on my phone".
 
 **Done when:** a long, image-heavy article paginates correctly on desktop and on a real phone, the
 0px check passes, and preferences apply live without losing the reader's position.
+
+**Status: done, on desktop and at phone size.** Driven in Chromium against the built client, using
+the committed fixtures as the articles — which is what makes "a long, image-heavy article" a claim
+about something rather than about lorem ipsum. **46 checks, all passing.** The 0px check is asserted
+at nine points: the long article, that article scrolled to its end, each of the three column-width
+presets, after a face change, the image-heavy article with all 62 images loaded, the wide-embeds
+article, the short one, and the whole thing again at 390×844. Every one reports a difference of
+exactly 0px, on both `article.scrollWidth === article.clientWidth` and
+`viewport.scrollWidth === article.offsetWidth`.
+
+Also checked: the article never scrolls vertically; nothing — image, table or `pre` — is wider than
+a column; a mid-column scroll is corrected to a boundary; the first column returns to exactly 0 and
+the last to the true end; arrows, space and the tap zones each turn exactly one whole column; a
+preference change keeps the reader within 2% of where they were; and the settings survive leaving
+the article and coming back. The trust boundary is checked end to end against an article carrying
+script tags, an `onerror`, a `javascript:` href, an iframe and inline styles: nothing executed,
+nothing survived, and the prose between the attacks is intact. 508 unit tests cover the rest.
+
+Four things this phase learnt that the spec could not have told us.
+
+**The deterministic formula is a lower bound, not an answer.** It divides the article's natural
+height by the height of a column, and that is right as far as it goes — but the single-column
+measurement sees text flowing continuously, and the columnar layout does not. A figure or a heading
+that must not be split is pushed whole into the next column, leaving the bottom of the previous one
+empty. On the image-heavy fixture that unused space came to **nineteen extra columns**, and the
+article bled a long way past a box sized for the height it measured. So the computed count is
+applied and then *checked*, and raised by however many columns the overflow implies, until nothing
+bleeds. It stays deterministic and it is bounded; it converges in two passes on the worst fixture.
+
+**Measuring in place makes the measurement its own trigger, twice over.** The reflow to one column
+changes the article's width. That (a) makes every `<picture>` and `srcset` image re-select a source
+and fire `load` again, and (b) changes the scroller's content box, waking a `ResizeObserver` watching
+it. Either one re-measures, which reflows, which fires again. The article re-measured about fifteen
+times a second, forever. **The visible symptom was not a flicker**: it was that page turns did not
+work — each measurement restored the scroll position and cancelled the smooth scroll mid-flight, so
+a turn moved two pixels and stopped. Fixed three ways, all of which are worth keeping: each image
+counts once, the viewport is watched through `visualViewport` rather than through an element we
+ourselves perturb, and a measurement that lands on the layout already applied publishes nothing.
+
+**"Measure the rendered stride from the DOM" cannot be done by sampling text.** The obvious reading —
+find where lines begin and take the distance between column starts — does not survive contact with
+real markup: `Range.getClientRects()` returns one rect per inline *fragment*, not per line, so a
+paragraph containing links or emphasis contributes rects at arbitrary offsets. On the long fixture
+that gave 102 distinct "column starts" for a 24-column article. The stride now comes from the
+rendered box — its `clientWidth`, its padding, and the `column-count` it is actually laying out with
+— which is still a measurement of the DOM and never the reader's preference, the thing the spec
+actually warns against trusting. The warning was about a layout the browser fits for itself; this
+one it does not.
+
+**Both ends of the article are special, not just the first.** The spec says the first column returns
+to `scrollLeft: 0` so the intro padding survives. The mirror case is easy to miss and looks
+identical to the original bug: rounding to the nearest boundary near the end lands a little short,
+which puts the viewport's right edge *inside* the final column and cuts the closing lines mid-word,
+with the trailing whitespace the explicit width exists to produce sitting just off screen. Anything
+within half a stride of the end now goes to the end.
+
+**Not verified: a real phone.** Everything above at 390×844 is Chromium emulating a phone, which is
+not the same thing — the mobile caveat in this phase is specifically about iOS Safari's address bar
+collapsing, and no emulator reproduces that. The code is written for it (`100dvh`, a debounced
+re-measure, `visualViewport` rather than `window.innerHeight`), but it is written against the
+described behaviour rather than the observed one. Worth half an hour on an actual iPhone before
+Phase 8 calls the PWA done.
 
 ---
 

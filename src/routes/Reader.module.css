@@ -1,0 +1,271 @@
+/*
+ * The reading view.
+ *
+ * The rule that matters most is a negative one: **nothing here may set a width on
+ * `.article`.** Its width is computed from a measurement and written as an inline
+ * style, because the browser's own column fitting is what causes the end of a long
+ * article to bleed past its padding. A `width` or `max-width` in this file would
+ * silently take that back. See `src/lib/columns.ts`.
+ */
+
+.screen {
+  position: relative;
+  /* dvh, not vh: iOS Safari's address bar collapsing changes vh mid-scroll, which
+     would change the column count under the reader. */
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--paper);
+}
+
+/* --- the bar --- */
+
+.bar {
+  flex: 0 0 auto;
+  position: relative;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--rule);
+  background: var(--paper);
+  font-family: var(--font-ui);
+}
+
+.crumb {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.settingsWrap {
+  position: relative;
+}
+
+.action,
+.danger {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink-muted);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.action:hover:not(:disabled) {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+
+.danger:hover:not(:disabled) {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.action:disabled,
+.danger:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.error {
+  padding: var(--space-2) var(--space-4);
+  border-left: 3px solid var(--danger);
+  background: var(--paper-sunken);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
+
+/* --- the article --- */
+
+.viewport {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  /* The horizontal drag *is* the swipe gesture; letting the browser do it keeps
+     the momentum and rubber-banding a reader expects, and the snap catches where
+     it lands. `pan-y` stays allowed so a pull-to-refresh elsewhere is unaffected. */
+  touch-action: pan-x pan-y;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.viewport::-webkit-scrollbar {
+  display: none;
+}
+
+.article {
+  /* No width and no max-width. See the note at the top of this file. */
+  height: 100%;
+  padding: var(--space-8) var(--space-8) var(--space-12);
+  /*
+   * The reader's chosen column width, and the *only* place it is declared.
+   * `useColumnLayout` reads it back from here rather than parsing the `em` value
+   * itself, so the preference, the arithmetic and the embed clamp cannot disagree.
+   * Without this line the hook found `column-width: auto`, fell back to the
+   * viewport width, and wrote that back as an inline value — after which the
+   * preference had no effect at all and every article was laid out in one
+   * screen-wide column.
+   */
+  column-width: var(--reading-column-width);
+  column-gap: var(--space-12);
+  column-fill: auto;
+  font-family: var(--reading-font);
+  font-size: var(--reading-font-size);
+  line-height: var(--reading-line-height);
+  color: var(--ink);
+  hyphens: auto;
+}
+
+@media (max-width: 40rem) {
+  .article {
+    padding: var(--space-6) var(--space-5) var(--space-8);
+  }
+}
+
+/* Two lines, never one: a single stray line at a column break pulls a second
+   along rather than standing alone at the top or bottom of a column. */
+.article :is(p, li, blockquote, dd) {
+  orphans: 2;
+  widows: 2;
+}
+
+.article :is(p, ul, ol, dl, blockquote, figure, pre, table) {
+  margin: 0 0 1em;
+}
+
+.article :is(h1, h2, h3, h4, h5, h6) {
+  margin: 1.4em 0 0.5em;
+  font-weight: 600;
+  line-height: var(--leading-tight);
+  /* A heading alone at the foot of a column is worse than a short column. */
+  break-after: avoid;
+  break-inside: avoid;
+}
+
+.article h1 {
+  font-size: 1.6em;
+}
+.article h2 {
+  font-size: 1.35em;
+}
+.article h3 {
+  font-size: 1.15em;
+}
+
+/*
+ * The clamp from the spec: every replaced or wide element is held to the reader's
+ * current column width, so an embed can never overflow a column. `--reading-column-
+ * width` is the same custom property the pagination reads, which is what keeps the
+ * clamp and the arithmetic in agreement.
+ */
+.article :is(img, video, iframe, table, pre, figure) {
+  max-width: min(100%, var(--reading-column-width));
+}
+
+.article :is(img, video) {
+  height: auto;
+  /* Never taller than a column, or a single photograph would dictate the layout. */
+  max-height: 70%;
+  object-fit: contain;
+  break-inside: avoid;
+}
+
+.article figure {
+  break-inside: avoid;
+}
+
+.article figcaption {
+  margin-top: var(--space-2);
+  font-size: 0.8em;
+  color: var(--ink-muted);
+}
+
+.article blockquote {
+  margin-left: 0;
+  padding-left: var(--space-4);
+  border-left: 2px solid var(--rule);
+  color: var(--ink-muted);
+}
+
+.article :is(pre, code) {
+  font-size: 0.85em;
+}
+
+.article pre {
+  padding: var(--space-3);
+  background: var(--paper-sunken);
+  border-radius: var(--radius);
+  overflow-x: auto;
+  white-space: pre-wrap;
+  /* Wrapped rather than scrolled: a horizontal scroller inside a horizontally
+     scrolled article swallows the page-turn gesture. */
+  word-break: break-word;
+}
+
+.article table {
+  border-collapse: collapse;
+  font-size: 0.85em;
+}
+
+.article :is(th, td) {
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--rule);
+  text-align: left;
+}
+
+.article a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+}
+
+.notice {
+  max-width: 34rem;
+  margin: var(--space-16) auto;
+  padding: 0 var(--space-6);
+  font-family: var(--font-ui);
+  color: var(--ink-muted);
+  text-align: center;
+}
+
+/* --- tap zones --- */
+
+.tapBack,
+.tapForward {
+  position: absolute;
+  bottom: 0;
+  /* Clear of the bar, so Close and Archive stay clickable. */
+  top: 4rem;
+  width: 18%;
+  max-width: 6rem;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  /* Behind the article, so a link in the text is still a link. */
+  z-index: 1;
+}
+
+.tapBack {
+  left: 0;
+}
+
+.tapForward {
+  right: 0;
+}
