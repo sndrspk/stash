@@ -68,6 +68,55 @@
   margin-top: var(--space-2);
 }
 
+/*
+ * The four typefaces, two by two.
+ *
+ * A flex row wrapped them three and one, because the names are of uneven length and
+ * "Geist" is much the shortest — which read as an accident rather than as a set. A
+ * two-column grid also gives each name the same amount of room to be sampled in its
+ * own face, which is the point of showing them in it.
+ */
+.faces {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+/* --- paper swatches --- */
+
+.swatches {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.swatch,
+.swatchOn {
+  flex: 1 1 0;
+  height: 2.5rem;
+  min-width: 0;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  cursor: pointer;
+  /* The background is the swatch colour, set inline from PAPERS. */
+}
+
+/*
+ * The selected one is ringed rather than filled, because filling it would cover the
+ * colour it is there to show. An outline sits outside the border box, so the swatch
+ * does not change size when it is picked and the row does not shift.
+ */
+.swatchOn {
+  border-color: var(--ink);
+  outline: 2px solid var(--ink);
+  outline-offset: 1px;
+}
+
+.swatch:hover {
+  border-color: var(--ink-muted);
+}
+
 .choice,
 .choiceOn {
   flex: 1 1 auto;

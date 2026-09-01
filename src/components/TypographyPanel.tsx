@@ -10,8 +10,10 @@ import {
   FONTS,
   FONT_SIZE,
   LINE_HEIGHT,
+  PAPERS,
   type ColumnWidthId,
   type FontId,
+  type PaperId,
   type ReadingPrefs,
   type ResolvedReadingMode,
 } from '../lib/prefs';
@@ -71,8 +73,34 @@ export function TypographyPanel({ prefs, mode, onChange, onClose }: TypographyPa
       </fieldset>
 
       <fieldset className={styles.group}>
+        <legend className={styles.legend}>Paper</legend>
+        {/*
+          Swatches rather than names: the control shows the thing it selects, which
+          for a colour is both quicker to read and impossible to misunderstand. The
+          name is still there for anyone not choosing by eye — as the label a screen
+          reader announces, and as the tooltip.
+        */}
+        <div className={styles.swatches}>
+          {(Object.keys(PAPERS) as PaperId[]).map((id) => (
+            <button
+              key={id}
+              type="button"
+              className={id === prefs.paper ? styles.swatchOn : styles.swatch}
+              style={{ background: PAPERS[id].swatch }}
+              aria-label={PAPERS[id].label}
+              title={PAPERS[id].label}
+              aria-pressed={id === prefs.paper}
+              onClick={() => set('paper', id)}
+            />
+          ))}
+        </div>
+      </fieldset>
+
+      <fieldset className={styles.group}>
         <legend className={styles.legend}>Typeface</legend>
-        <div className={styles.choices}>
+        {/* Two by two, not three and a stray one: four names of uneven length wrap
+            raggedly in a flex row, and a grid makes the set read as a set. */}
+        <div className={styles.faces}>
           {(Object.keys(FONTS) as FontId[]).map((id) => (
             <button
               key={id}

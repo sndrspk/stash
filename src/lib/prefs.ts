@@ -24,6 +24,30 @@ export const FONTS = {
 
 export type FontId = keyof typeof FONTS;
 
+/**
+ * The paper the app is printed on.
+ *
+ * Applied to the whole app rather than to the reading view alone, and set from the
+ * reading view's own panel because that is where you can see what it does. A front
+ * page on beige behind an article on white would read as a bug rather than as a
+ * choice — there is one sheet of paper here, not two.
+ *
+ * `swatch` is the colour of the button that picks it, so the control shows the thing
+ * rather than naming it. The actual palettes live in `theme.css`, keyed by the same
+ * ids: this record is what the panel renders, not a second source of truth for the
+ * colours. **They are two halves of one decision — change a value here and change it
+ * there**, which is the cost of a swatch that is honest about what it selects.
+ */
+export const PAPERS = {
+  beige: { label: 'Beige', swatch: '#faf8f4' },
+  white: { label: 'White', swatch: '#ffffff' },
+  blue: { label: 'Blue', swatch: '#eef4fb' },
+  lilac: { label: 'Lilac', swatch: '#f3eff9' },
+  mustard: { label: 'Mustard', swatch: '#faf3df' },
+} as const;
+
+export type PaperId = keyof typeof PAPERS;
+
 /** The spec's three, verbatim: Narrow 22em, Medium 34em, Wide 56em. */
 export const COLUMN_WIDTHS = {
   narrow: { label: 'Narrow', em: 22 },
@@ -62,6 +86,7 @@ export interface ReadingPrefs {
   lineHeight: number;
   columnWidth: ColumnWidthId;
   mode: ReadingMode;
+  paper: PaperId;
 }
 
 export const DEFAULT_PREFS: ReadingPrefs = {
@@ -70,6 +95,7 @@ export const DEFAULT_PREFS: ReadingPrefs = {
   lineHeight: LINE_HEIGHT.default,
   columnWidth: 'medium',
   mode: 'auto',
+  paper: 'beige',
 };
 
 /**
@@ -149,7 +175,12 @@ export function normalizePrefs(stored: unknown): ReadingPrefs {
       ? raw.mode
       : DEFAULT_PREFS.mode;
 
-  return { font, fontSize, lineHeight, columnWidth, mode };
+  const paper =
+    typeof raw.paper === 'string' && raw.paper in PAPERS
+      ? (raw.paper as PaperId)
+      : DEFAULT_PREFS.paper;
+
+  return { font, fontSize, lineHeight, columnWidth, mode, paper };
 }
 
 /**

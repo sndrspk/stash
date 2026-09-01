@@ -43,8 +43,9 @@ what each attempt got:
   image slots, but can still appear in the sidebar.
 - **Reading view.** Full article text, paged or scrolling. Paged is an e-reader-style multi-column
   layout you move through sideways; scrolling is the ordinary web one, and is the default on a
-  phone. Per-article archive and delete, and sticky typography preferences (font, size, line
-  height, column width).
+  phone. Per-article archive and delete, sticky typography preferences (font, size, line height,
+  column width), and a choice of paper — beige, white, blue, lilac or mustard — which the whole app
+  is printed on.
 - **Sync.** Archive and delete hit the Instapaper API, not just local state. Bookmarks added
   elsewhere (phone, browser extension) appear on the next refresh.
 - **Better text than Instapaper alone.** Instapaper's own extractor gives up on some paywalled or
@@ -92,7 +93,7 @@ rather use Cloudflare or Netlify.
 
 ```
 index.html            App entry; theme-color, iOS install metadata, font preload
-src/main.tsx          React root
+src/main.tsx          React root; src/App.tsx wraps the router with the paper theme
 src/router.tsx        Routes: / · /read/:bookmarkId · /settings · /unlock
 src/AppLayout.tsx     The shell; the reading view opts out of it
 src/routes/           One component per route

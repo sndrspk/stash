@@ -66,6 +66,55 @@
   color-scheme: light;
 }
 
+/*
+ * --- Papers ---
+ *
+ * The sheet the whole app is printed on, chosen from the reading view's own panel
+ * and set as `data-paper` on <html>. Beige is the default and is already on bare
+ * `:root` above; these four are the alternatives.
+ *
+ * Only the surfaces move. `--ink` and the accent stay exactly where they are, which
+ * is what keeps every one of these readable without five separate contrast
+ * arguments — each paper is a pale tint, so the same near-black text sits at better
+ * than 15:1 on all of them.
+ *
+ * **These blocks must stay above the dark ones.** Their selectors have the same
+ * specificity, so order is the only thing that decides, and dark has to win: a pale
+ * blue sheet under a dark theme's light ink would be unreadable, and a reader who
+ * asked for dark asked for dark. The paper choice is kept rather than cleared, so it
+ * returns when they come back to a light theme.
+ *
+ * The ids here are the ids in `PAPERS` in `src/lib/prefs.ts`, and the swatch colours
+ * there are these `--paper` values. Two halves of one decision; change both.
+ */
+:root[data-paper='white'] {
+  --paper: #ffffff;
+  --paper-raised: #ffffff;
+  --paper-sunken: #f4f4f5;
+  --rule: #e4e4e7;
+}
+
+:root[data-paper='blue'] {
+  --paper: #eef4fb;
+  --paper-raised: #ffffff;
+  --paper-sunken: #e3ecf7;
+  --rule: #cfdcec;
+}
+
+:root[data-paper='lilac'] {
+  --paper: #f3eff9;
+  --paper-raised: #ffffff;
+  --paper-sunken: #eae3f4;
+  --rule: #ddd2ec;
+}
+
+:root[data-paper='mustard'] {
+  --paper: #faf3df;
+  --paper-raised: #fffdf6;
+  --paper-sunken: #f3e9cd;
+  --rule: #e6d8b0;
+}
+
 /* --- Palette: dark --- */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {

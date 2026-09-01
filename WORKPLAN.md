@@ -737,6 +737,39 @@ self-consistent tells you nothing about whether the result is usable.* The 0px c
 unreadable article; the panel's own box was well-formed while half its contents were off-screen.
 Every check added since asks whether a person could use the thing, not whether the numbers agree.
 
+### Departure: a paper colour, and it is app-wide
+
+Five sheets — beige (the default, and what the app always was), white, pastel blue, lilac and a
+muted mustard — picked from the same panel as the typography, as swatches rather than names so the
+control shows the thing it selects.
+
+**It applies to the whole app, not to the reading view.** A front page on beige behind an article on
+white would read as a bug rather than as a choice; there is one sheet of paper here, not two. So it
+is set as `data-paper` on `<html>` from a component above the router, and every screen including the
+gate is printed on it. It also rewrites the light `theme-color` meta, which on Android is the
+visible half of the change — Chrome tints its own toolbar with it, and without that the browser
+keeps a beige bar above a white page.
+
+Only the surfaces move: `--ink` and the accent stay exactly where they are, which is what keeps all
+five readable without five separate contrast arguments. Each paper is a pale tint, so the same
+near-black text sits better than 15:1 on every one.
+
+**Dark mode overrides the paper rather than tinting it**, and that is decided by declaration order
+rather than by specificity, since the selectors are equal — so the paper blocks must stay above the
+dark ones in `theme.css`, and a test asserts it. A pale blue sheet under a dark theme's light ink
+would be unreadable, and a reader who asked for dark asked for dark. The choice is kept rather than
+cleared, so it returns with a light theme.
+
+The swatch in the panel and the palette in the stylesheet are two halves of one decision, which is
+exactly the kind of pair that drifts silently — a swatch that no longer matches the paper it selects
+is a control that lies, and it would look fine in a screenshot of either half alone. A test reads
+`theme.css` and asserts every swatch equals the `--paper` it selects.
+
+Where this *should* live long-term is arguably the Settings screen, which spec §5 reserves for app
+theme as distinct from inline reading preferences. It is in the reading panel because that is where
+you can see what it does, and because that is where it was asked for. Worth revisiting in Phase 9 if
+Settings grows an appearance section.
+
 ---
 
 ## Phase 7 — Extraction fallback

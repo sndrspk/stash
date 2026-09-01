@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -7,6 +9,7 @@ import {
   FONT_SIZE,
   LINE_HEIGHT,
   PAGED_MIN_WIDTH_PX,
+  PAPERS,
   normalizePrefs,
   prefsToCss,
   resolveReadingMode,
@@ -28,6 +31,56 @@ describe('the presets', () => {
 
   it('offers the spec’s four faces', () => {
     expect(Object.keys(FONTS).sort()).toEqual(['crimson', 'geist', 'piazzolla', 'source-serif']);
+  });
+});
+
+describe('the papers', () => {
+  const theme = readFileSync('src/styles/theme.css', 'utf8');
+
+  it('offers beige plus the four alternatives', () => {
+    expect(Object.keys(PAPERS).sort()).toEqual(['beige', 'blue', 'lilac', 'mustard', 'white']);
+    expect(DEFAULT_PREFS.paper).toBe('beige');
+  });
+
+  /*
+   * The swatch in the panel and the palette in the stylesheet are two halves of one
+   * decision, and nothing but this test stops them drifting: a swatch that no longer
+   * matches the paper it selects is a control that lies, and it would look perfectly
+   * fine in a screenshot of either half on its own.
+   */
+  it('paints each swatch the colour the stylesheet gives that paper', () => {
+    for (const [id, { swatch }] of Object.entries(PAPERS)) {
+      if (id === DEFAULT_PREFS.paper) continue; // the default lives on bare :root
+
+      const block = new RegExp(`:root\\[data-paper='${id}'\\]\\s*\\{([^}]*)\\}`).exec(theme);
+      expect(block, `no theme.css block for '${id}'`).not.toBeNull();
+
+      const paper = /--paper:\s*(#[0-9a-f]{6})/i.exec(block![1] ?? '')?.[1];
+      expect(paper?.toLowerCase(), `--paper for '${id}'`).toBe(swatch.toLowerCase());
+    }
+  });
+
+  it('paints the default swatch the colour of the bare :root paper', () => {
+    const base = /:root\s*\{([\s\S]*?)\}/.exec(theme)?.[1] ?? '';
+    const paper = /--paper:\s*(#[0-9a-f]{6})/i.exec(base)?.[1];
+    expect(paper?.toLowerCase()).toBe(PAPERS[DEFAULT_PREFS.paper].swatch.toLowerCase());
+  });
+
+  /*
+   * Order is the only thing separating these, because the selectors have equal
+   * specificity — and it has to go this way round. A pale blue sheet under a dark
+   * theme's light ink would be unreadable, and a reader who asked for dark asked for
+   * dark.
+   */
+  it('declares the papers above the dark palettes, so dark wins', () => {
+    const lastPaper = Math.max(
+      ...Object.keys(PAPERS)
+        .filter((id) => id !== DEFAULT_PREFS.paper)
+        .map((id) => theme.indexOf(`:root[data-paper='${id}']`)),
+    );
+    expect(lastPaper).toBeGreaterThan(0);
+    expect(theme.indexOf('prefers-color-scheme: dark')).toBeGreaterThan(lastPaper);
+    expect(theme.indexOf(":root[data-theme='dark']")).toBeGreaterThan(lastPaper);
   });
 });
 
@@ -73,6 +126,7 @@ describe('normalizePrefs', () => {
       lineHeight: 1.7,
       columnWidth: 'wide',
       mode: 'scrolling',
+      paper: 'blue',
     };
     expect(normalizePrefs(stored)).toEqual(stored);
   });
@@ -81,6 +135,18 @@ describe('normalizePrefs', () => {
     expect(normalizePrefs({}).mode).toBe('auto');
     expect(normalizePrefs({ mode: 'sideways' }).mode).toBe('auto');
     expect(normalizePrefs({ mode: 42 }).mode).toBe('auto');
+  });
+
+  it('falls back to beige for a paper that no longer exists', () => {
+    expect(normalizePrefs({ paper: 'chartreuse' }).paper).toBe('beige');
+    expect(normalizePrefs({ paper: 7 }).paper).toBe('beige');
+    expect(normalizePrefs({}).paper).toBe('beige');
+  });
+
+  it('keeps a valid paper', () => {
+    for (const id of Object.keys(PAPERS)) {
+      expect(normalizePrefs({ paper: id }).paper).toBe(id);
+    }
   });
 
   it('keeps an explicit mode', () => {
