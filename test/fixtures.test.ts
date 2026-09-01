@@ -293,40 +293,70 @@ describe('assignShapes', () => {
     expect(assigned.get('short')).toBe(3);
   });
 
-  it('treats an empty body as the hard paywall', () => {
-    const assigned = assignShapes([candidate(9, { chars: 0, truncated: true })]);
-    expect(assigned.get('hard-paywall')).toBe(9);
+  /*
+   * Two captures in a row put the wrong article in the hard-paywall slot, both by
+   * the same rule: `chars === 0`. First a request that had timed out; then — once
+   * that was excluded — a page Instapaper had returned 200 and real markup for,
+   * which simply had no prose in it.
+   *
+   * Zero characters has three causes and only one of them is a paywall. Which one it
+   * is lives in the response, not in the measurements, so these pin that selection
+   * reads the outcome instead of re-deriving it.
+   */
+  describe('what fills the hard-paywall slot', () => {
+    const zero = { chars: 0, paragraphs: 0, images: 0, wideBlocks: 0, truncated: true };
+
+    const withOutcome = (
+      id: number,
+      outcome: Candidate['outcome'],
+      m: Partial<Measurements> = {},
+    ): Candidate => ({ bookmarkId: id, measurements: { ...zero, ...m }, outcome });
+
+    it('is a refusal — an error, or an empty body', () => {
+      expect(assignShapes([withOutcome(9, 'refused')]).get('hard-paywall')).toBe(9);
+    });
+
+    it('is not a request that never completed', () => {
+      // A timeout is a fact about the network. It says nothing about the article.
+      expect(assignShapes([withOutcome(1, 'unreachable')]).has('hard-paywall')).toBe(false);
+    });
+
+    it('is not an article that came back as markup with no prose', () => {
+      // The second misfiling: 200, real markup, one wide block, no text — a video
+      // page. Instapaper parsed it and gave us what was on it; it refused nothing.
+      expect(assignShapes([withOutcome(1, 'article', { wideBlocks: 1 })]).has('hard-paywall')).toBe(
+        false,
+      );
+    });
+
+    it('is the refusal even when both impostors come first', () => {
+      // The order both captures failed in: the impostor was earlier in the sample,
+      // so `find` took it and the real refusal further down went unused.
+      const assigned = assignShapes([
+        withOutcome(1, 'unreachable'),
+        withOutcome(2, 'article', { wideBlocks: 1 }),
+        withOutcome(3, 'refused'),
+      ]);
+      expect(assigned.get('hard-paywall')).toBe(3);
+    });
+
+    it('still lets a prose-free article serve a shape it genuinely has', () => {
+      // Excluding it from hard-paywall is not discarding it. A page that is all
+      // embed is a real capture and a fair wide-embeds example.
+      const assigned = assignShapes([withOutcome(1, 'article', { wideBlocks: 4 })]);
+      expect(assigned.get('wide-embeds')).toBe(1);
+    });
   });
 
-  /*
-   * The first real capture labelled a timed-out request as the hard-paywall fixture.
-   * Nothing in the measurements could have told them apart — a paywall and a dropped
-   * connection both arrive as zero characters — so the distinction has to be carried
-   * from the fetch, and these pin that it is.
-   */
-  describe('a fetch that never completed', () => {
+  describe('a request that never completed', () => {
     const unreachable = (id: number): Candidate => ({
       bookmarkId: id,
       measurements: { chars: 0, paragraphs: 0, images: 0, wideBlocks: 0, truncated: true },
       outcome: 'unreachable',
     });
 
-    it('is not the hard paywall', () => {
-      // The property the fixture demonstrates is Instapaper refusing the text. A
-      // timeout is not that; it is us never having asked successfully.
-      expect(assignShapes([unreachable(1)]).has('hard-paywall')).toBe(false);
-    });
-
-    it('does not beat a genuine refusal that came later in the sample', () => {
-      // The order this failed in: the timeout was first, so `find` took it and the
-      // real 400 further down the list went unused.
-      const assigned = assignShapes([unreachable(1), candidate(2, { chars: 0, truncated: true })]);
-      expect(assigned.get('hard-paywall')).toBe(2);
-    });
-
-    it('is excluded from every other shape too', () => {
-      const assigned = assignShapes([unreachable(1)]);
-      expect(assigned.size).toBe(0);
+    it('is excluded from every shape', () => {
+      expect(assignShapes([unreachable(1)]).size).toBe(0);
     });
 
     it('leaves the rest of the sample alone', () => {
