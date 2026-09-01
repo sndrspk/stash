@@ -1,178 +1,357 @@
-.wrap {
-  max-width: 48rem;
+/*
+ * The front page grid.
+ *
+ * Two columns on a desktop — stories and a narrow sidebar — collapsing to one on a
+ * phone with the hero still the hero and the sidebar lists below the fold rather
+ * than behind a drawer. A drawer would hide the two lists that exist precisely to be
+ * glanced at; scrolling past the lead story to reach them is the newspaper's own
+ * answer and it needs no affordance.
+ */
+
+.page {
+  max-width: 76rem;
+  margin: 0 auto;
+  padding: var(--space-8) var(--space-6) var(--space-16);
 }
 
-.head {
+/* --- pull to refresh --- */
+
+.pull {
   display: flex;
   align-items: flex-end;
-  justify-content: space-between;
-  gap: var(--space-4);
-  padding-bottom: var(--space-4);
-  margin-bottom: var(--space-6);
-  border-bottom: 1px solid var(--rule);
+  justify-content: center;
+  overflow: hidden;
+  /* Height is driven from the gesture, so no transition: it must track the finger. */
 }
 
-.phase {
+.pullLabel {
+  padding-bottom: var(--space-2);
   font-size: var(--text-xs);
-  font-weight: 500;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-faint);
-  margin-bottom: var(--space-1);
+}
+
+/* --- masthead --- */
+
+.masthead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-6);
+  padding-bottom: var(--space-4);
+  border-bottom: 3px double var(--ink);
+}
+
+.dateline {
+  font-size: var(--text-xs);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
 }
 
 .title {
   font-family: var(--font-reading);
   font-size: var(--text-3xl);
-  font-weight: 600;
   line-height: var(--leading-tight);
-  letter-spacing: -0.015em;
+  letter-spacing: -0.01em;
 }
 
-.sync {
+.refresh {
+  flex: 0 0 auto;
   padding: var(--space-2) var(--space-4);
-  font-size: var(--text-sm);
-  color: var(--paper);
   background: var(--ink);
+  color: var(--paper);
   border: 1px solid var(--ink);
   border-radius: var(--radius);
+  font-size: var(--text-sm);
   cursor: pointer;
-  white-space: nowrap;
 }
 
-.sync:hover:not(:disabled) {
+.refresh:hover:not(:disabled) {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.refresh:disabled {
   background: var(--ink-muted);
   border-color: var(--ink-muted);
-}
-
-.sync:disabled {
-  opacity: 0.45;
   cursor: default;
 }
 
 .error {
-  padding: var(--space-3);
-  margin-bottom: var(--space-4);
+  margin-top: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border-left: 3px solid var(--danger);
+  background: var(--paper-sunken);
   font-size: var(--text-sm);
-  color: var(--danger);
-  border: 1px solid var(--danger);
-  border-radius: var(--radius);
 }
 
-.muted {
+/* --- the grid --- */
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-12);
+  margin-top: var(--space-8);
+}
+
+@media (min-width: 60rem) {
+  .grid {
+    grid-template-columns: minmax(0, 3fr) minmax(14rem, 1fr);
+    gap: var(--space-16);
+  }
+}
+
+.stories {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+}
+
+/* --- hero --- */
+
+.hero {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.heroLink,
+.cardLink {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+
+.heroImage {
+  width: 100%;
+  /* A wide crop, so the lead story reads as a photograph rather than a thumbnail. */
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  background: var(--paper-sunken);
+  border-radius: var(--radius);
+  margin-bottom: var(--space-4);
+}
+
+.heroTitle {
+  font-family: var(--font-reading);
+  font-size: var(--text-3xl);
+  line-height: var(--leading-tight);
+  letter-spacing: -0.01em;
+}
+
+.heroLink:hover .heroTitle,
+.cardLink:hover .cardTitle,
+.listLink:hover {
+  color: var(--accent);
+}
+
+@media (min-width: 60rem) {
+  .heroTitle {
+    font-size: var(--text-4xl);
+  }
+}
+
+.heroExcerpt {
+  max-width: var(--measure);
+  font-family: var(--font-reading);
+  font-size: var(--text-lg);
+  line-height: var(--leading-relaxed);
   color: var(--ink-muted);
 }
 
-.count {
-  margin-bottom: var(--space-4);
+.source {
+  font-size: var(--text-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+/* --- the three cards --- */
+
+.cards {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-8);
+  padding-top: var(--space-8);
+  border-top: 1px solid var(--rule);
+}
+
+@media (min-width: 42rem) {
+  .cards {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-6);
+  }
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.cardImage {
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  object-fit: cover;
+  background: var(--paper-sunken);
+  border-radius: var(--radius);
+  margin-bottom: var(--space-3);
+}
+
+.cardTitle {
+  font-family: var(--font-reading);
+  font-size: var(--text-xl);
+  line-height: var(--leading-tight);
+}
+
+.cardExcerpt {
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  color: var(--ink-muted);
+}
+
+.noPictures {
   font-size: var(--text-sm);
   color: var(--ink-faint);
 }
 
+/* --- sidebar --- */
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  min-width: 0;
+}
+
+@media (min-width: 60rem) {
+  .sidebar {
+    border-left: 1px solid var(--rule);
+    padding-left: var(--space-8);
+  }
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.listHeading {
+  font-size: var(--text-xs);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--ink);
+}
+
+.listItems {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.listItem {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.listItem:last-child {
+  border-bottom: 0;
+}
+
+.listLink {
+  font-family: var(--font-reading);
+  font-size: var(--text-base);
+  line-height: var(--leading-tight);
+  color: inherit;
+  text-decoration: none;
+}
+
+.listSource {
+  font-size: var(--text-xs);
+  color: var(--ink-faint);
+}
+
+/* --- states --- */
+
 .empty {
-  padding: var(--space-12) 0;
+  margin-top: var(--space-16);
+  padding: var(--space-12) var(--space-6);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
 }
 
 .emptyTitle {
   font-family: var(--font-reading);
-  font-size: var(--text-xl);
-  margin-bottom: var(--space-2);
+  font-size: var(--text-2xl);
 }
 
-.list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-6);
-  padding: var(--space-4) 0;
-  border-bottom: 1px solid var(--rule);
+.muted {
+  color: var(--ink-muted);
+  font-size: var(--text-sm);
+  max-width: 34ch;
 }
 
 /*
- * A fixed box, and an empty one when no image resolved, so a row without a picture
- * keeps the same title alignment as one with — otherwise the list ripples as the
- * resolution pass fills in behind it.
+ * Skeletons, not a spinner: the page's shape is known before its content is, and
+ * showing that shape is what stops the layout jumping when the content lands.
  */
-.thumb,
-.thumbEmpty {
-  flex: 0 0 auto;
-  width: 64px;
-  height: 48px;
-  border-radius: 2px;
+.skeleton {
+  pointer-events: none;
 }
 
-.thumb {
-  object-fit: cover;
-  background: var(--rule);
-}
-
-.itemText {
-  min-width: 0;
-  flex: 1 1 auto;
-}
-
-.itemTitle {
-  font-family: var(--font-reading);
-  font-size: var(--text-lg);
-  line-height: 1.35;
-  color: var(--ink);
-  text-decoration: none;
-}
-
-.itemTitle:hover {
-  color: var(--accent);
-  text-decoration: underline;
-}
-
-.itemMeta {
-  margin-top: var(--space-1);
-  font-size: var(--text-sm);
-  color: var(--ink-faint);
-}
-
-.actions {
-  display: flex;
-  gap: var(--space-2);
-  flex-shrink: 0;
-}
-
-.action,
-.danger {
-  padding: var(--space-1) var(--space-3);
-  font-size: var(--text-sm);
-  background: transparent;
-  border: 1px solid var(--rule);
+.skeletonImage,
+.skeletonCardImage,
+.skeletonLine,
+.skeletonLineShort {
+  background: var(--paper-sunken);
   border-radius: var(--radius);
-  cursor: pointer;
-  color: var(--ink-muted);
+  animation: pulse 1.6s ease-in-out infinite;
 }
 
-.action:hover:not(:disabled) {
-  color: var(--ink);
-  border-color: var(--ink-faint);
+.skeletonImage {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  margin-bottom: var(--space-4);
 }
 
-.danger:hover:not(:disabled) {
-  color: var(--danger);
-  border-color: var(--danger);
+.skeletonCardImage {
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  margin-bottom: var(--space-3);
 }
 
-.action:disabled,
-.danger:disabled {
-  opacity: 0.4;
-  cursor: default;
+.skeletonLine {
+  height: 1rem;
+  margin-bottom: var(--space-3);
 }
 
-@media (max-width: 34rem) {
-  .item {
-    flex-direction: column;
-    align-items: stretch;
-    gap: var(--space-3);
+.skeletonLineShort {
+  height: 1rem;
+  width: 60%;
+  margin-bottom: var(--space-3);
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
   }
 }
