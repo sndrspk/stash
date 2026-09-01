@@ -141,6 +141,48 @@
   display: none;
 }
 
+/*
+ * Scrolling mode: the ordinary web layout, and the default on a phone.
+ *
+ * Almost everything below is shared with paged mode — the typography, the media
+ * clamp, the widow and orphan rules, the headline. What changes is the axis, so
+ * these two rules are the whole of it.
+ */
+.viewportScrolling {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  /* Momentum and the browser's own scroll position restoration, both free. */
+  touch-action: pan-y;
+}
+
+.articleScrolling {
+  /* A measure, not a column: the same width preference, applied as a maximum and
+     centred, so a wide window does not give a hundred-character line. */
+  max-width: var(--reading-column-width);
+  margin: 0 auto;
+  padding-bottom: var(--space-16);
+
+  /*
+   * These four undo `useColumnLayout`'s inline styles — an explicit width, a column
+   * count, a column width and a fixed height — which outlive the hook that set them
+   * and would otherwise leave the article fifteen thousand pixels wide and one
+   * viewport tall.
+   *
+   * `!important` is the right tool rather than a shortcut here, and specificity is
+   * why: an inline style beats any selector, so a stylesheet cannot take an element
+   * back from one by being more specific. The alternative is clearing them from
+   * React, which means a hook reaching into a DOM node it does not own to undo work
+   * that a class change has already made irrelevant.
+   */
+  width: auto !important;
+  height: auto !important;
+  column-count: auto !important;
+  column-width: auto !important;
+}
+
 .article {
   /* No width and no max-width. See the note at the top of this file. */
   height: 100%;

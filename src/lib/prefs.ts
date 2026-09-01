@@ -37,12 +37,31 @@ export type ColumnWidthId = keyof typeof COLUMN_WIDTHS;
 export const FONT_SIZE = { min: 0.875, max: 1.75, step: 0.0625, default: 1.125 };
 export const LINE_HEIGHT = { min: 1.3, max: 2.0, step: 0.05, default: 1.6 };
 
+/**
+ * How the article moves.
+ *
+ * `paged` is the spec's e-reader model: columns, turned sideways. `scrolling` is
+ * the ordinary web one, and it exists because a phone is not a page — the address
+ * bar collapsing mid-read changes the height a column has to fill, which a paged
+ * layout has to fight and a scrolling one is simply immune to.
+ *
+ * `auto` is the default and it is deliberately a stored value of its own rather
+ * than a resolved one. A reader who has never opened the panel should get the right
+ * mode on whatever they are holding, and keep getting it if they rotate the device
+ * or narrow the window; a reader who has chosen gets what they chose, everywhere.
+ */
+export type ReadingMode = 'auto' | 'paged' | 'scrolling';
+
+/** What `auto` resolves to, and what the panel offers. */
+export type ResolvedReadingMode = 'paged' | 'scrolling';
+
 export interface ReadingPrefs {
   font: FontId;
   /** rem */
   fontSize: number;
   lineHeight: number;
   columnWidth: ColumnWidthId;
+  mode: ReadingMode;
 }
 
 export const DEFAULT_PREFS: ReadingPrefs = {
@@ -50,7 +69,37 @@ export const DEFAULT_PREFS: ReadingPrefs = {
   fontSize: FONT_SIZE.default,
   lineHeight: LINE_HEIGHT.default,
   columnWidth: 'medium',
+  mode: 'auto',
 };
+
+/**
+ * Above this width a touch device is a tablet being held like a book, and paging
+ * suits it. Below it, it is a phone.
+ *
+ * 50rem is 800px, which puts an iPad in portrait on the scrolling side and in
+ * landscape on the paged side. That is a judgement rather than a measurement, and
+ * it only decides the *default* — either device can be told otherwise.
+ */
+export const PAGED_MIN_WIDTH_PX = 800;
+
+export interface DeviceShape {
+  /** `(pointer: coarse)` — a finger rather than a mouse. */
+  coarsePointer: boolean;
+  viewportWidth: number;
+}
+
+/**
+ * The mode actually in force.
+ *
+ * Only a touch device gets scrolling by default. A narrow desktop window stays
+ * paged, because narrowing a window is not the same as reading on a phone — the
+ * column clamp already makes that case work, and silently changing how the app
+ * behaves when someone drags a window edge would be its own kind of wrong.
+ */
+export function resolveReadingMode(mode: ReadingMode, device: DeviceShape): ResolvedReadingMode {
+  if (mode === 'paged' || mode === 'scrolling') return mode;
+  return device.coarsePointer && device.viewportWidth < PAGED_MIN_WIDTH_PX ? 'scrolling' : 'paged';
+}
 
 const clamp = (value: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, value));
@@ -95,7 +144,12 @@ export function normalizePrefs(stored: unknown): ReadingPrefs {
       ? snap(clamp(raw.lineHeight, LINE_HEIGHT.min, LINE_HEIGHT.max), LINE_HEIGHT.step)
       : DEFAULT_PREFS.lineHeight;
 
-  return { font, fontSize, lineHeight, columnWidth };
+  const mode =
+    raw.mode === 'paged' || raw.mode === 'scrolling' || raw.mode === 'auto'
+      ? raw.mode
+      : DEFAULT_PREFS.mode;
+
+  return { font, fontSize, lineHeight, columnWidth, mode };
 }
 
 /**

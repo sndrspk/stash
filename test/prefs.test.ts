@@ -6,9 +6,17 @@ import {
   FONTS,
   FONT_SIZE,
   LINE_HEIGHT,
+  PAGED_MIN_WIDTH_PX,
   normalizePrefs,
   prefsToCss,
+  resolveReadingMode,
 } from '../src/lib/prefs';
+
+const PHONE = { coarsePointer: true, viewportWidth: 390 };
+const PHONE_LANDSCAPE = { coarsePointer: true, viewportWidth: 844 };
+const LAPTOP = { coarsePointer: false, viewportWidth: 1440 };
+const NARROW_WINDOW = { coarsePointer: false, viewportWidth: 600 };
+const TOUCH_LAPTOP = { coarsePointer: true, viewportWidth: 1440 };
 
 describe('the presets', () => {
   it('is the spec’s column widths, verbatim', () => {
@@ -23,10 +31,61 @@ describe('the presets', () => {
   });
 });
 
+describe('resolveReadingMode', () => {
+  it('defaults a phone to scrolling', () => {
+    expect(resolveReadingMode('auto', PHONE)).toBe('scrolling');
+  });
+
+  it('defaults a desktop to paged', () => {
+    expect(resolveReadingMode('auto', LAPTOP)).toBe('paged');
+  });
+
+  it('leaves a narrow desktop window paged', () => {
+    // Narrowing a window is not the same as reading on a phone: the column clamp
+    // already makes that case work, and changing how the app behaves when someone
+    // drags a window edge would be its own kind of wrong.
+    expect(resolveReadingMode('auto', NARROW_WINDOW)).toBe('paged');
+  });
+
+  it('leaves a touchscreen laptop paged', () => {
+    expect(resolveReadingMode('auto', TOUCH_LAPTOP)).toBe('paged');
+  });
+
+  it('treats a phone turned sideways as a tablet, by width', () => {
+    // A judgement, not a measurement — and one an explicit choice overrides.
+    expect(resolveReadingMode('auto', PHONE_LANDSCAPE)).toBe('paged');
+    expect(PAGED_MIN_WIDTH_PX).toBeGreaterThan(390);
+  });
+
+  it('obeys an explicit choice on every device', () => {
+    for (const device of [PHONE, PHONE_LANDSCAPE, LAPTOP, NARROW_WINDOW, TOUCH_LAPTOP]) {
+      expect(resolveReadingMode('paged', device)).toBe('paged');
+      expect(resolveReadingMode('scrolling', device)).toBe('scrolling');
+    }
+  });
+});
+
 describe('normalizePrefs', () => {
   it('accepts a valid stored object unchanged', () => {
-    const stored = { font: 'crimson', fontSize: 1.25, lineHeight: 1.7, columnWidth: 'wide' };
+    const stored = {
+      font: 'crimson',
+      fontSize: 1.25,
+      lineHeight: 1.7,
+      columnWidth: 'wide',
+      mode: 'scrolling',
+    };
     expect(normalizePrefs(stored)).toEqual(stored);
+  });
+
+  it('defaults the mode to auto, so the device decides', () => {
+    expect(normalizePrefs({}).mode).toBe('auto');
+    expect(normalizePrefs({ mode: 'sideways' }).mode).toBe('auto');
+    expect(normalizePrefs({ mode: 42 }).mode).toBe('auto');
+  });
+
+  it('keeps an explicit mode', () => {
+    expect(normalizePrefs({ mode: 'paged' }).mode).toBe('paged');
+    expect(normalizePrefs({ mode: 'scrolling' }).mode).toBe('scrolling');
   });
 
   it('returns the defaults for nothing at all', () => {

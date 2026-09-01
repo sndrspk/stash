@@ -41,9 +41,10 @@ what each attempt got:
   secondary articles with images below it; a sidebar with two title-only lists — the 5 oldest and
   the 5 newest unread bookmarks. Articles with no recoverable image never occupy one of the four
   image slots, but can still appear in the sidebar.
-- **Reading view.** Full article text in a horizontally paginated, e-reader-style multi-column
-  layout, with per-article archive and delete actions and sticky typography preferences (font,
-  size, line height, column width).
+- **Reading view.** Full article text, paged or scrolling. Paged is an e-reader-style multi-column
+  layout you move through sideways; scrolling is the ordinary web one, and is the default on a
+  phone. Per-article archive and delete, and sticky typography preferences (font, size, line
+  height, column width).
 - **Sync.** Archive and delete hit the Instapaper API, not just local state. Bookmarks added
   elsewhere (phone, browser extension) appear on the next refresh.
 - **Better text than Instapaper alone.** Instapaper's own extractor gives up on some paywalled or

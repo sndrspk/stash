@@ -13,16 +13,24 @@ import {
   type ColumnWidthId,
   type FontId,
   type ReadingPrefs,
+  type ResolvedReadingMode,
 } from '../lib/prefs';
 import styles from './TypographyPanel.module.css';
 
 export interface TypographyPanelProps {
   prefs: ReadingPrefs;
+  /** What `auto` currently resolves to, so the panel shows what is in force. */
+  mode: ResolvedReadingMode;
   onChange: (prefs: ReadingPrefs) => void;
   onClose: () => void;
 }
 
-export function TypographyPanel({ prefs, onChange, onClose }: TypographyPanelProps) {
+const MODES: { id: ResolvedReadingMode; label: string }[] = [
+  { id: 'paged', label: 'Paged' },
+  { id: 'scrolling', label: 'Scrolling' },
+];
+
+export function TypographyPanel({ prefs, mode, onChange, onClose }: TypographyPanelProps) {
   const set = <K extends keyof ReadingPrefs>(key: K, value: ReadingPrefs[K]) =>
     onChange({ ...prefs, [key]: value });
 
@@ -40,6 +48,28 @@ export function TypographyPanel({ prefs, onChange, onClose }: TypographyPanelPro
         }
       }}
     >
+      {/*
+        Layout first, because it changes more than the others do: the column-width
+        control below means something different in each mode — a column in one, a
+        maximum line length in the other.
+      */}
+      <fieldset className={styles.group}>
+        <legend className={styles.legend}>Layout</legend>
+        <div className={styles.choices}>
+          {MODES.map(({ id, label }) => (
+            <button
+              key={id}
+              type="button"
+              className={id === mode ? styles.choiceOn : styles.choice}
+              aria-pressed={id === mode}
+              onClick={() => set('mode', id)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </fieldset>
+
       <fieldset className={styles.group}>
         <legend className={styles.legend}>Typeface</legend>
         <div className={styles.choices}>
@@ -59,7 +89,9 @@ export function TypographyPanel({ prefs, onChange, onClose }: TypographyPanelPro
       </fieldset>
 
       <fieldset className={styles.group}>
-        <legend className={styles.legend}>Column width</legend>
+        <legend className={styles.legend}>
+          {mode === 'paged' ? 'Column width' : 'Text width'}
+        </legend>
         <div className={styles.choices}>
           {(Object.keys(COLUMN_WIDTHS) as ColumnWidthId[]).map((id) => (
             <button

@@ -232,6 +232,20 @@ export function useColumnLayout(
   }, [article, scroller]);
 
   /*
+   * Forget the applied layout when paging is switched off.
+   *
+   * The inline styles this hook writes are overridden by `.articleScrolling` in the
+   * stylesheet rather than cleared from here — see the note on that rule. What the
+   * stylesheet cannot do is reset the memo, and without this a reader who switched
+   * to scrolling and back would find the first measurement matching what was
+   * `applied` before they left, deciding nothing had changed, and publishing
+   * nothing.
+   */
+  useEffect(() => {
+    if (!enabled) applied.current = null;
+  }, [enabled]);
+
+  /*
    * Re-measure when the viewport changes size.
    *
    * Watched through `visualViewport` and `window.resize` rather than with a
