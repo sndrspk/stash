@@ -10,8 +10,9 @@ not affiliated with or endorsed by Instapaper.
 own instance, connect it to your own Instapaper account, and it serves exactly you. If you want to
 use it, fork or clone this repo and deploy it yourself.
 
-> **Status: early.** The spec and work plan are complete; the first piece of real code is the
-> extraction probe (below). The PWA itself has not been started.
+> **Status: in progress.** The gate, the data layer, image resolution and the front page are
+> built and run against a real Instapaper account. The reading view is next (Phase 6), and the
+> extraction fallback after it (Phase 7). [`WORKPLAN.md`](WORKPLAN.md) is the running record.
 
 ## Try the extraction probe
 
@@ -93,7 +94,7 @@ index.html            App entry; theme-color, iOS install metadata, font preload
 src/main.tsx          React root
 src/router.tsx        Routes: / · /read/:bookmarkId · /settings · /unlock
 src/AppLayout.tsx     The shell; the reading view opts out of it
-src/routes/           One component per route (placeholders until their phase lands)
+src/routes/           One component per route (the reading view is still a placeholder)
 src/components/       Shared UI
 src/hooks/            Reusable behaviour, e.g. the PWA install prompt
 src/styles/           Theme tokens (light/dark) and the self-hosted @font-face rules
@@ -113,9 +114,9 @@ WORKPLAN.md           Phased implementation plan, decisions, open questions, ris
 .env.example          Every environment variable, documented
 ```
 
-The remaining screens land as the phases in `WORKPLAN.md` are completed; each route renders a
-placeholder naming the phase that fills it. What's in `src/lib` is Phase 7a code, written early
-because it answers the riskiest product question first.
+The front page, the gate and settings are built; the reading view lands with Phase 6 in
+`WORKPLAN.md` and renders a placeholder naming it until then. Some of what's in `src/lib` is Phase
+7a extraction code, written early because it answers the riskiest product question first.
 
 ## Getting started
 

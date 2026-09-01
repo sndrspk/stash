@@ -17,16 +17,19 @@ import {
   purgeExpired,
   readAllImages,
   readBookmark,
+  readTextFor,
   readUnread,
   restore,
   type ArchiveSnapshot,
 } from './store.js';
 import type { RemoteBookmark } from './sync.js';
+import { ensureText, type TextPassResult } from './text.js';
 
 export const keys = {
   unread: ['bookmarks', 'unread'] as const,
   bookmark: (id: number) => ['bookmarks', id] as const,
   images: ['images'] as const,
+  text: (ids: readonly number[]) => ['text', [...ids].sort((a, b) => a - b)] as const,
 };
 
 export { ApiError };
@@ -114,6 +117,35 @@ export function useResolveImages() {
     onSuccess: (result) => {
       if (result.resolved > 0 || result.none > 0 || result.failed > 0) {
         void client.invalidateQueries({ queryKey: keys.images });
+      }
+    },
+  });
+}
+
+/** Cached text for the handful of articles whose excerpt has to be derived. */
+export function useTextFor(ids: readonly number[]) {
+  return useQuery({
+    queryKey: keys.text(ids),
+    queryFn: () => readTextFor(ids),
+    staleTime: Infinity,
+  });
+}
+
+/**
+ * Fetches text for the four slot articles that carry no `description`.
+ *
+ * Eager, unlike everything else: an excerpt is on screen the moment the slot is, so
+ * waiting for the reader to open the article is too late. It is still only ever four
+ * requests, and only for the ones that need it.
+ */
+export function useEnsureText() {
+  const client = useQueryClient();
+
+  return useMutation<TextPassResult, Error, readonly BookmarkRecord[]>({
+    mutationFn: (bookmarks) => ensureText(bookmarks),
+    onSuccess: (result) => {
+      if (result.fetched > 0 || result.empty > 0) {
+        void client.invalidateQueries({ queryKey: ['text'] });
       }
     },
   });

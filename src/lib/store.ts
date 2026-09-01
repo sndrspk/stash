@@ -205,6 +205,33 @@ export async function readBestText(id: number): Promise<ArticleTextRecord | unde
   return rows.find((r) => r.source === 'extracted') ?? rows.find((r) => r.source === 'instapaper');
 }
 
+/**
+ * The best available text for each of several bookmarks, as one map.
+ *
+ * The front page needs this for up to four articles at once, and one transaction
+ * beats four round trips through the same store.
+ */
+export async function readTextFor(ids: readonly number[]): Promise<Map<number, string>> {
+  if (ids.length === 0) return new Map();
+
+  const db = await getDb();
+  const tx = db.transaction('article_text', 'readonly');
+  const index = tx.objectStore('article_text').index('by_bookmark');
+
+  const out = new Map<number, string>();
+  for (const id of new Set(ids)) {
+    const rows = await index.getAll(id);
+    // Extracted wins when present, exactly as `readBestText` decides it.
+    const best =
+      rows.find((row) => row.source === 'extracted') ??
+      rows.find((row) => row.source === 'instapaper');
+    if (best) out.set(id, best.html);
+  }
+
+  await tx.done;
+  return out;
+}
+
 export async function writeText(
   id: number,
   source: TextSource,

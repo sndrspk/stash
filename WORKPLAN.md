@@ -490,19 +490,62 @@ resolved image next to an article is what makes the pass demonstrable. The slot 
 
 ## Phase 5 — Front page
 
-- [ ] Layout: hero (image + title + excerpt), three secondary cards with images, sidebar with
+- [x] Layout: hero (image + title + excerpt), three secondary cards with images, sidebar with
       5-oldest and 5-newest unread title-only lists.
-- [ ] Slot selection: hero and three secondaries picked at random from unread bookmarks that have a
-      resolved image. Image-less bookmarks are excluded from those four slots only.
-- [ ] Excerpts: `description` when present, else derived from fetched text for the four slot
-      articles (fetch those four eagerly; everything else stays lazy).
-- [ ] Responsive: the newspaper grid collapses to a single column on phones, hero stays the hero,
-      sidebar lists move below the fold rather than into a drawer.
-- [ ] Empty, loading (skeletons) and error states. Zero-unread is a real state and needs a design.
-- [ ] Pull-to-refresh and an explicit refresh action, both triggering a sync.
+- [x] Slot selection: hero and three secondaries picked at random from unread bookmarks that have a
+      resolved image, in [`src/lib/front-page.ts`](src/lib/front-page.ts) — pure and seeded, so the
+      rules are tested against arrays rather than against a rendered page. Image-less bookmarks are
+      excluded from those four slots only.
+- [x] Excerpts: `description` when present, else derived from fetched text for the four slot
+      articles. Only those four ever fetch; everything else on the page is title-only and would be
+      paying for prose it never shows.
+- [x] Responsive: one column below 60rem, the three cards stacking below 42rem, hero still the hero
+      and the sidebar lists below the stories rather than in a drawer. A drawer would hide the two
+      lists that exist precisely to be glanced at.
+- [x] Empty, loading (skeletons) and error states. Zero unread says so and offers the one useful
+      action; skeletons hold the page's shape so nothing jumps when the content lands.
+- [x] Pull-to-refresh and an explicit refresh action, both triggering a sync.
 
 **Done when:** the front page renders from fixtures and from live data, reshuffles on refresh, and
 never shows an image-less article in an image slot.
+
+**Status: done.** Driven in Chromium against the built client with a stubbed deployment — eighteen
+articles, a third of them without a picture, half of them without a `description`, so both the
+exclusion rule and both excerpt paths have something to bite on. Twenty-one checks, all passing:
+hero and three cards all illustrated, no image-less article in any slot, five and five in the
+sidebar with no repeat of a slot article and no overlap between the lists, an excerpt on every slot
+article, and text fetched for exactly the slot articles that had no description. Six refreshes
+produced four distinct heroes and **no further image lookups** — reshuffling is free.
+
+On a 390×844 phone: no horizontal overflow, the hero still at the top, the cards in one column, the
+sidebar below the stories. A synthesised touch drag arms the indicator past the threshold and a
+release triggers exactly one sync. 455 unit tests cover the rest, including the slot rules asserted
+across 200 seeds rather than the one that happened to work.
+
+Four things are worth naming.
+
+**The sidebar excludes what is already on show, and the two lists never overlap.** Neither is in the
+spec. A front page that runs its lead story again halfway down the sidebar has spent one of its ten
+remaining rows saying nothing; and with fewer than fourteen unread, "5 newest" and "5 oldest" name
+some of the same articles, which reads as a bug rather than as a fact about the queue. `newest` is
+filled first and `oldest` takes what remains, so nothing is printed twice.
+
+**`api/text` landed here rather than in Phase 6.** Phase 5's excerpts need `get_text` and Phase 6
+needs the same call and the same cache row, so it is written once. **The body is returned
+unsanitised, deliberately**: sanitising belongs at the point of injection, not of transport. Phase 5
+never injects it — it reduces it to plain text, which no tag survives. **Phase 6 must run it through
+DOMPurify or equivalent before putting it in the document**, and its bullet still says so.
+
+**Archive and delete moved to the reading view**, which is where the spec puts them, and where the
+Phase 3 scaffold's list was not. They sit on the Phase 6 placeholder for now — plainly, with no
+reading view around them — rather than leaving the app with no way to archive anything until Phase 6
+lands.
+
+**Not every unread article is reachable from the front page.** Four slots and ten sidebar rows show
+fourteen; a queue of fifty leaves thirty-six on no screen at all. That is what a front page *is*,
+and the spec describes no other view — but it means a large queue has no browsable index. Raised as
+an open question rather than answered here, since inventing an "all unread" screen is a product
+decision, not a Phase 5 detail.
 
 ---
 
@@ -668,6 +711,14 @@ preference.
    to 7c — but not yet in practice. Run `npm run probe` against two or three publishers you
    subscribe to and see. If the copy step is fine, 7c stays deferred indefinitely; if it's the thing
    that stops you using Stash, it moves up.
+2. **Does a large queue need a browsable index?** Raised by Phase 5. The front page shows fourteen
+   articles: four in image slots and ten in the sidebar lists. That is deliberate and it is what a
+   front page is — but on a queue of fifty it means thirty-six unread articles are on no screen in
+   the app, reachable only by refreshing until the shuffle happens to surface them. The spec
+   describes no other view, so this is a product decision rather than an oversight to fix: either
+   the front page is the whole app and a deep queue is meant to be sampled rather than worked
+   through, or there is an "all unread" list behind it. Worth deciding from use, once there is a
+   real queue in it.
 
 ## Risks
 
