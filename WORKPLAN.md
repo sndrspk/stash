@@ -379,8 +379,9 @@ that matters is the one that does not assume the anonymiser is correct.
 **Done when:** the bookmark list round-trips, archiving in Stash is visible in Instapaper's own web
 UI, and the purge sweep drops exactly the rows past their grace period and no others.
 
-**Status:** the purge rule and the round trip are verified; visibility in Instapaper's own UI is
-not, and needs the operator.
+**Status: done.** The purge rule and the round trip were verified in a browser; the last open
+item — that archiving in Stash is visible in Instapaper's own account — has now been confirmed
+against the real account on the deployed app. Sync pulls the unread list and archive round-trips.
 
 Driven in a real browser against the built client, with a stubbed Instapaper: unlock, sync, three
 articles newest-first, **reload and the list comes back from IndexedDB with no network call**,
@@ -392,16 +393,24 @@ The purge clause is asserted directly: three articles, one archived long ago, on
 one never archived — exactly one row is collected, and the boundary is tested at the deadline as
 well as past it.
 
-**Left for the operator — the one open item in Phases 0–3:** press Sync against the real account
-and confirm that archiving something in Stash shows up in Instapaper's own web UI. Everything up to
-the API call is verified; that this is the *right* API call is what a live run confirms.
+**Confirmed live.** Sync against the real account returns the unread list, and archiving in Stash
+removes the article from the account. Everything up to the API call was already verified; that it
+is the *right* API call is what this run establishes.
 
-This could not have been checked before Phase 2a, and not for the reason it looked like. Sync
-against a real account returned nothing at all, because `parseBookmarkList` assumed
-`bookmarks/list` answers with an array and it answers with an object — a bug that shipped **in this
-phase**, passed every unit test, and passed a browser run against a stub written to the same
-assumption. Both layers agreed with each other and neither had met the API. The parser was fixed in
-Phase 2a; this item is now unblocked.
+Two things stood between the code being right and this being demonstrable, and both are worth
+keeping because neither was visible from the code.
+
+**`bookmarks/list` answers with an object, not an array.** `parseBookmarkList` assumed an array —
+a bug that shipped **in this phase**, passed every unit test, and passed a browser run against a
+stub written to the same assumption. Both layers agreed with each other and neither had met the
+API. Fixed in Phase 2a.
+
+**The deployment had no `STASH_PASSPHRASE`.** Every call was refused with 503 before a line of
+Instapaper code ran, and two screens described that one cause in two unrelated ways — `/settings`
+blamed Instapaper connectivity, Sync reported a bare `not_configured` — because a refusal body was
+being cast to a status object. `/unlock` had the correct message the whole time. Deployment
+environment requirements are now documented in [`docs/VERCEL.md`](docs/VERCEL.md), which is where
+this should have been findable.
 
 A plain list stands in for the front page meanwhile, labelled as a Phase 3 scaffold. Phase 5
 replaces it wholesale — it exists so the data layer is demonstrable, not as a half-built version of

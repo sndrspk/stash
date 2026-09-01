@@ -115,6 +115,45 @@ the address bar before the code.
 
 ## Environment variables
 
-Set as Vercel environment variables, never in the client bundle. `.env.example` documents
-all five. Phase 9's deploy step verifies none of them reached `dist/` by grepping the built
-output for the token.
+Set as Vercel environment variables, never in the client bundle. Phase 9's deploy step
+verifies none of them reached `dist/` by grepping the built output for the token.
+
+**Five are required for a working deployment.** A sixth, `STASH_ENCRYPTION_KEY`, is
+documented in `.env.example` and reserved for Phase 7b's publisher cookies; nothing reads it
+yet, and leaving it unset changes nothing today.
+
+| Variable | Missing means |
+| --- | --- |
+| `STASH_PASSPHRASE` | **Every API call is refused with 503 before it starts.** The gate will not compare against an unset value. |
+| `INSTAPAPER_CONSUMER_KEY` | `/api/status` and Sync answer `not_configured`, naming the variable. |
+| `INSTAPAPER_CONSUMER_SECRET` | as above |
+| `INSTAPAPER_OAUTH_TOKEN` | as above |
+| `INSTAPAPER_OAUTH_TOKEN_SECRET` | as above |
+
+**Scope them to Production, not Preview.** Every branch gets a preview URL, and a preview
+carrying live credentials is a second public door to the same Instapaper account. The
+consequence is that Sync will not work on a preview deployment — which is correct, and worth
+knowing before you spend time debugging it.
+
+**Adding a variable does not change a deployment that already exists.** Vercel attaches the
+environment at deploy time, so an existing deployment keeps the set it was built with.
+Redeploy after adding one.
+
+### The failure that cost an hour
+
+A deployment had the four Instapaper variables and no `STASH_PASSPHRASE`. It produced two
+messages that sounded unrelated and neither of which named the cause:
+
+- `/settings` — "Not connected. Could not reach Instapaper."
+- Sync — "Could not sync: `not_configured`"
+
+Both came from the same 503 refusal by `requireSession`. `/settings` cast the refusal body
+to a status object, which left every field undefined and rendered as an Instapaper
+connectivity problem; Sync read that body's `error` field and reported the bare code. Nothing
+Instapaper-related had run.
+
+`/unlock` got it right the whole time — it says "This deployment has no passphrase set. Add
+`STASH_PASSPHRASE` and redeploy." **When a deployment misbehaves in a way that smells like
+credentials, check `/unlock` first**; it is the one screen whose only job is the gate. The
+other two now distinguish a refusal from an Instapaper failure, but the ordering advice
+stands.
