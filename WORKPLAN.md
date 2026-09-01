@@ -272,49 +272,121 @@ per-application, separately from Full API access, and it fails nowhere else.
 ## Phase 2a — Fixture capture
 
 Moved out of Phase 0: this is the first point in the plan where a live authenticated call is
-possible. Do it immediately after Phase 2, before Phase 3 — everything from the data layer onward is
-easier to build and much easier to test against real payloads than against invented ones.
+possible. Phase 3 was built ahead of it at the operator's request; nothing was lost, but Phases 5 and
+6 genuinely want real payloads.
 
-- [ ] `scripts/capture.ts` (`npm run capture`): with the Phase 2 credentials in `.env`, pull ~20
-      bookmark records from `bookmarks/list` and write them to `fixtures/bookmarks.json`.
-- [ ] Capture 5–6 `get_text` HTML payloads into `fixtures/text/`, covering the shapes that break
-      things downstream: one short, one very long, one image-heavy, one with wide embeds/tables, one
-      soft-paywalled where `get_text` returns a stub, one hard-paywalled where nothing will help.
-      The last two are what Phase 7's gating is tested against.
-- [ ] **Scrub before committing.** These come from a real account and land in a public repo. Strip
-      or replace anything account-identifying, and check the payloads for tokens or personal data in
-      URLs and query strings. Never commit a fixture you have not read.
-- [ ] Record which shape each file covers, so a later reader knows why each one is there and what
-      breaks if it goes.
+- [x] `scripts/capture.ts` (`npm run capture`): pulls the unread list, fetches `get_text` for a
+      sample (default 20, `--limit` to widen, 700ms apart), measures each article, and writes
+      `fixtures/bookmarks.json`.
+- [x] Picks one article per shape into `fixtures/text/` — soft paywall, hard paywall, image-heavy,
+      wide embeds, very long, short — by **measuring** rather than guessing, reusing the Phase 7a
+      truncation heuristic to identify the stub. The two paywall shapes are claimed first: they are
+      identified by a property nothing else can substitute for, so assigning them last would let a
+      stub be spent as the "short" example and leave the case uncovered. A shape with no candidate
+      is reported as missing rather than padded.
+- [x] **Scrub before committing** — reframed, because the original bullet understated it. Stripping
+      account-identifying fields is not enough. Two things are being published: a record of what
+      someone reads, and publishers' article prose. So the fixtures keep **structure** and discard
+      **content**: every tag, attribute, nesting depth, paragraph count, image dimension and
+      character count survives exactly, and every word is replaced with filler of the same shape.
+      That is not a compromise for what these are for — Phase 5 picks slots by image presence and
+      headline length, Phase 6 computes a column count from rendered height, and neither cares what
+      the words say. Untouched originals go to `fixtures/.raw/` under `--keep-raw`, git-ignored.
+- [x] `fixtures/MANIFEST.md` is generated with the run, recording each file's shape, its
+      measurements, and why that shape is in the set.
 
 **Done when:** `fixtures/` holds the bookmark records and the six text shapes, scrubbed and
 documented, and the truncation tests run against the real stub payload rather than only the
 synthetic one.
 
+**Status: the tooling is done and tested; the capture itself needs the operator.** No fixtures are
+committed yet — the script has never been run, because the token is on the operator's machine and
+belongs nowhere else.
+
+Three bugs the anonymiser had, all found by running it against real markup rather than test strings,
+and all silent:
+
+- **Full documents came back empty.** `get_text` returns a fragment, and linkedom parses a fragment
+  as a sibling of `<body>`; the fix used a container element, which then discarded `<html>`,
+  `<head>` and `<body>` when given a whole page. A captured page anonymised to `<!DOCTYPE html>` and
+  nothing else, with no error.
+- **Relative URLs leaked the publisher.** Only `https?://` values were rewritten, so every
+  `href="/environment/the-real-slug"` kept its section and headline slug.
+- **Fixing that broke file extensions.** Relative paths went through the plain text anonymiser, so
+  `hero-1400.jpg` became `elit-1400.sed` — and Phase 4 branches on what an image URL looks like.
+
+Class names are deliberately **kept**: they are CSS hooks, and Phase 7's furniture-removal rules
+select on them, so anonymising them would make the fixtures useless for the phase most likely to
+need them.
+
+**Left for the operator:**
+
+```sh
+npm run capture -- --dry-run   # see what would be captured, write nothing
+npm run capture                # write the anonymised fixtures
+```
+
+Then read `fixtures/MANIFEST.md` and skim the output before committing. The rule stands even though
+the output is anonymised: never commit a fixture you have not read.
+
 ---
 
 ## Phase 3 — Data layer and sync
 
-- [ ] IndexedDB schema (via `idb`):
-      - `bookmarks` — `bookmark_id` (key), `title`, `url`, `time`, `description`, `hash`, `folder`,
-        `state` (unread/archived/deleted), `synced_at`, `purge_after` (nullable).
-      - `article_text` — `bookmark_id` (key), `html`, `source` (`instapaper` | `extracted`),
-        `fetched_at`.
-      - `image_cache` — source URL (key), `image_url` (nullable), `status` (`ok`/`none`/`error`),
-        `resolved_at`. A `none` row is a permanent negative result and must never be retried.
-- [ ] `api/bookmarks`: proxies the bookmark list for the `unread` folder.
-- [ ] Client sync: upsert into IndexedDB, reconcile removals (a bookmark gone from Instapaper is
-      marked, not silently dropped).
-- [ ] `api/archive` and `api/delete`: one bookmark, one action, called only from an explicit user
-      click. There is deliberately no batch endpoint.
-- [ ] Optimistic archive/delete with rollback on failure; sets `purge_after = now + 7 days` on the
-      cached text and image rows.
-- [ ] Purge sweep on app start: drop cached text/images past `purge_after`. Undoing an action before
-      the deadline clears the mark and keeps the cache.
-- [ ] TanStack Query over the IndexedDB layer for the front-page and reading-view reads.
+- [x] IndexedDB schema (via `idb`), in [`src/lib/db.ts`](src/lib/db.ts). Two departures from the
+      sketch above, both deliberate:
+      - **`state` gained a fourth value, `gone`.** It is ours, not Instapaper's: the bookmark
+        vanished from the remote list without us archiving or deleting it — moved to another
+        folder, or removed from another client. See the reconcile rule below.
+      - **`article_text` is keyed `${bookmark_id}:${source}`, not by `bookmark_id`.** Phase 7's
+        store-beside-never-over requires both sources to coexist, which a single key per bookmark
+        cannot express. Keying by bookmark would have quietly made the extracted copy overwrite the
+        Instapaper one — the exact thing that rule exists to prevent.
+- [x] `api/bookmarks`: proxies the bookmark list for the `unread` folder. A pure proxy — it does no
+      filtering of its own, because reconciliation needs the previous state and that lives on the
+      client.
+- [x] Client sync: upsert into IndexedDB, reconcile removals. **A bookmark absent from the remote
+      list is marked `gone`, never deleted**, because dropping rows on absence makes the cache only
+      as trustworthy as the last response. A truncated page or a transient empty list would destroy
+      state that took API calls to build. Marking is reversible; the next sync that mentions the row
+      restores it.
+- [x] `api/archive` and `api/delete`: one bookmark, one action. The absence of a batch endpoint is
+      **enforced**, not merely intended — an array where a number belongs is a 400, not a loop.
+      Delete is irreversible at Instapaper, so that distinction is worth a test rather than a
+      comment.
+- [x] Optimistic archive/delete with exact rollback; sets `purge_after = now + 7 days` on the cached
+      text and image rows. The local mark returns a snapshot of every row it touched, which is what
+      makes the rollback exact rather than approximate.
+- [x] Purge sweep on app start, in `runStartupPurge`. Deletes only rows whose `purge_after` is set
+      and in the past; a null mark is not in the index at all, so it is never even considered.
+      Reappearing in a sync clears the mark, which is what makes an undone archive keep its text.
+- [x] TanStack Query over the IndexedDB layer. Queries read from **IndexedDB, never the network**;
+      syncing is a separate mutation that fetches, writes, then invalidates. So there is one source
+      of truth, it works offline, and a failed sync leaves the last good data on screen.
 
 **Done when:** the bookmark list round-trips, archiving in Stash is visible in Instapaper's own web
 UI, and the purge sweep drops exactly the rows past their grace period and no others.
+
+**Status:** the purge rule and the round trip are verified; visibility in Instapaper's own UI is
+not, and needs the operator.
+
+Driven in a real browser against the built client, with a stubbed Instapaper: unlock, sync, three
+articles newest-first, **reload and the list comes back from IndexedDB with no network call**,
+archive removes a row, and a forced 502 on the next archive restores the list exactly. 237 unit
+tests cover the rest, with the store tests running against a real IndexedDB implementation rather
+than a stand-in that would agree with our assumptions.
+
+The purge clause is asserted directly: three articles, one archived long ago, one archived just now,
+one never archived — exactly one row is collected, and the boundary is tested at the deadline as
+well as past it.
+
+**Left for the operator:** press Sync against the real account and confirm that archiving something
+in Stash shows up in Instapaper's own web UI. Everything up to the API call is verified; that this
+is the *right* API call is what a live run confirms.
+
+A plain list stands in for the front page meanwhile, labelled as a Phase 3 scaffold. Phase 5
+replaces it wholesale — it exists so the data layer is demonstrable, not as a half-built version of
+the newspaper layout.
 
 ---
 

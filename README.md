@@ -170,6 +170,37 @@ These come from Instapaper's API terms and are treated as non-negotiable through
 - "Instapaper" is not used as this app's name or logo — Stash describes itself as a client *for*
   Instapaper.
 
+### Article text belongs to whoever wrote it
+
+The constraints above come from Instapaper. This one comes from the publishers whose articles pass
+through Stash, and it is worth stating because the answer differs sharply between two things that
+look similar.
+
+**Caching an article for the person who saved it is reading.** It is what Instapaper's own apps,
+every read-it-later service and every browser reader mode do. **Committing that same article to a
+public repository is republishing it**, because a copy then goes to everyone who clones. Three
+decisions keep Stash on the first side of that line, and they are load-bearing rather than
+incidental:
+
+- **Single-tenant is doing real work here.** One deployment serves one person, so Stash never shows
+  one reader's cached article text to anybody else. A shared, server-side article cache would be a
+  genuinely different question — the architecture forecloses it rather than answering it.
+- **Cached text never leaves the device.** It lives in IndexedDB, per device, and is purged seven
+  days after an article is archived or deleted. Nothing is uploaded. The only server-side cache is
+  resolved `og:image` URLs, which are addresses rather than content.
+- **Fixtures are the exception, and are treated as one.** They are the one place article text would
+  be redistributed, so `npm run capture` keeps structure and discards content: every tag,
+  attribute, image dimension and character count survives, and every word is replaced. See
+  [`fixtures/MANIFEST.md`](fixtures/MANIFEST.md).
+
+Phase 7's extraction fallback is the only path that fetches from a publisher directly rather than
+through Instapaper, so it fetches **like a reader, not a crawler**: one named article that you
+already saved, an honest `Stash/0.1` User-Agent rather than a disguised one, bounded concurrency
+with a per-host delay, and session cookies replayed only for publishers you subscribe to.
+
+None of this is legal advice. It is the reasoning the design actually rests on, written down so that
+nobody forking this has to reconstruct it.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

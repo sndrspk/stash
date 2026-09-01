@@ -39,6 +39,44 @@ export class InstapaperError extends Error {
  * `params` is a list rather than an object because OAuth permits repeated names
  * and the signature depends on all of them.
  */
+/**
+ * A signed POST that returns the response body as text, without assuming JSON.
+ *
+ * `bookmarks/get_text` answers with an HTML fragment rather than JSON, so it cannot
+ * go through `call`. Everything up to reading the body is identical, which is why
+ * the signing lives here rather than being duplicated.
+ */
+export async function callText(
+  path: string,
+  params: readonly Param[],
+  credentials: InstapaperCredentials,
+  signal?: AbortSignal,
+): Promise<{ status: number; body: string }> {
+  const url = `${INSTAPAPER_BASE}${path}`;
+
+  const { header } = signRequest({
+    method: 'POST',
+    url,
+    consumerKey: credentials.consumerKey,
+    consumerSecret: credentials.consumerSecret,
+    token: credentials.token,
+    tokenSecret: credentials.tokenSecret,
+    body: params,
+  });
+
+  const form = new URLSearchParams();
+  for (const [name, value] of params) form.append(name, value);
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { authorization: header, 'content-type': 'application/x-www-form-urlencoded' },
+    body: form.toString(),
+    signal,
+  });
+
+  return { status: response.status, body: await response.text() };
+}
+
 export async function call(
   path: string,
   params: readonly Param[],
