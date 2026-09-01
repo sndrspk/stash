@@ -83,8 +83,16 @@
   gap: var(--space-2);
 }
 
+/*
+ * Deliberately **not** `position: relative`.
+ *
+ * The settings panel is absolutely positioned, and whichever ancestor is positioned
+ * becomes the edge it aligns to. That has to be the bar, whose right edge is the
+ * screen's; making this wrapper the containing block aligned the panel to the "Aa"
+ * button instead and pushed it off the left of a phone. See `TypographyPanel.module.css`.
+ */
 .settingsWrap {
-  position: relative;
+  position: static;
 }
 
 .action,

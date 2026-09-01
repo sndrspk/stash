@@ -50,6 +50,7 @@ export function Reader() {
 
   const scroller = useRef<HTMLDivElement>(null);
   const article = useRef<HTMLElement>(null);
+  const settings = useRef<HTMLDivElement>(null);
 
   // Paged or scrolling. `auto` — the default — is scrolling on a phone and paged
   // everywhere else; see `resolveReadingMode`.
@@ -103,6 +104,27 @@ export function Reader() {
   useEffect(() => {
     if (failed instanceof ApiError && failed.status === 401) navigate('/unlock', { replace: true });
   }, [failed, navigate]);
+
+  /*
+   * A tap anywhere else closes the settings.
+   *
+   * The panel covers most of a phone screen, so requiring a second tap on the "Aa"
+   * button to dismiss it means aiming at a 40px target that is behind the thing you
+   * are trying to get rid of. `pointerdown` rather than `click` so it closes on the
+   * way down, before the tap reaches whatever is underneath.
+   */
+  useEffect(() => {
+    if (!showSettings) return;
+
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Node && settings.current?.contains(target) === true) return;
+      setShowSettings(false);
+    };
+
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
+  }, [showSettings]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -160,7 +182,7 @@ export function Reader() {
         <p className={styles.crumb}>{bookmark ? hostOf(bookmark.url) : ''}</p>
 
         <div className={styles.actions}>
-          <div className={styles.settingsWrap}>
+          <div className={styles.settingsWrap} ref={settings}>
             <button
               type="button"
               className={styles.action}
