@@ -29,6 +29,7 @@ import { argv, env, exit } from 'node:process';
 import {
   SHAPES,
   anonymizeHtml,
+  describeResponse,
   assignShapes,
   measure,
   toFixtureBookmark,
@@ -53,6 +54,12 @@ const option = (name: string, fallback: number): number => {
   const at = argv.indexOf(`--${name}`);
   const value = at >= 0 ? Number(argv[at + 1]) : NaN;
   return Number.isFinite(value) && value > 0 ? value : fallback;
+};
+
+const text = (name: string, fallback: string): string => {
+  const at = argv.indexOf(`--${name}`);
+  const value = at >= 0 ? argv[at + 1] : undefined;
+  return value && !value.startsWith('--') ? value : fallback;
 };
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -134,13 +141,15 @@ async function main(): Promise<void> {
     );
   }
 
+  const folder = text('folder', 'unread');
+
   console.log('\nStash — fixture capture\n');
-  console.log('Fetching the unread list…');
+  console.log(`Fetching the "${folder}" folder…`);
 
   const raw = await call(
     '/api/1.1/bookmarks/list',
     [
-      ['folder_id', 'unread'],
+      ['folder_id', folder],
       ['limit', String(Math.max(limit, RECORD_COUNT))],
     ],
     credentials,
@@ -148,7 +157,26 @@ async function main(): Promise<void> {
   );
 
   const bookmarks = parseBookmarkList(raw);
-  if (bookmarks.length === 0) fail('The unread folder is empty — nothing to capture.');
+
+  if (bookmarks.length === 0) {
+    /*
+     * "No bookmarks parsed" and "the folder is empty" are different claims, and
+     * only one of them is something this code can actually know. Print what came
+     * back instead of asserting a cause: an empty folder and a response we failed
+     * to understand look identical from here, and telling someone their folder is
+     * empty when it is not sends them looking in the wrong place entirely.
+     */
+    console.error('\nNo bookmarks parsed from the response.\n');
+    console.error(describeResponse(raw));
+    console.error(
+      '\nIf the tally above shows bookmark entries, the parser is at fault — send me\n' +
+        'this output. If it shows none, the folder really is empty. To check that the\n' +
+        'endpoint works at all, try a folder you know has something in it:\n\n' +
+        '  npm run capture -- --dry-run --folder archive\n' +
+        '  npm run capture -- --dry-run --folder starred\n',
+    );
+    exit(1);
+  }
 
   console.log(`  ${bookmarks.length} bookmarks.\n`);
 
@@ -297,6 +325,7 @@ if (flag('help') || argv.includes('-h')) {
   console.log(
     '\nnpm run capture — build the fixture set from a real Instapaper account.\n\n' +
       '  --limit N     articles to sample for text (default 20)\n' +
+      '  --folder ID   unread (default), starred, archive, or a folder id\n' +
       '  --dry-run     fetch and report, write nothing\n' +
       '  --keep-raw    also write untouched originals to fixtures/.raw (git-ignored)\n\n' +
       'Requires the four Instapaper values in .env. Output is anonymised: structure\n' +
