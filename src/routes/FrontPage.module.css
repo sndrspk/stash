@@ -87,15 +87,34 @@
 
 .item {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: var(--space-6);
   padding: var(--space-4) 0;
   border-bottom: 1px solid var(--rule);
 }
 
+/*
+ * A fixed box, and an empty one when no image resolved, so a row without a picture
+ * keeps the same title alignment as one with — otherwise the list ripples as the
+ * resolution pass fills in behind it.
+ */
+.thumb,
+.thumbEmpty {
+  flex: 0 0 auto;
+  width: 64px;
+  height: 48px;
+  border-radius: 2px;
+}
+
+.thumb {
+  object-fit: cover;
+  background: var(--rule);
+}
+
 .itemText {
   min-width: 0;
+  flex: 1 1 auto;
 }
 
 .itemTitle {

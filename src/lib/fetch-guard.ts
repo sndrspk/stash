@@ -22,7 +22,22 @@ export const TOTAL_TIMEOUT_MS = CONNECT_TIMEOUT_MS + READ_TIMEOUT_MS;
 export const MAX_REDIRECTS = 5;
 export const MAX_BYTES = 5 * 1024 * 1024;
 
-export class BlockedUrlError extends Error {}
+/**
+ * A request that was refused rather than attempted, or abandoned part-way.
+ *
+ * `permanent` separates "this URL can never work" — a blocked address, a scheme we
+ * do not speak, a redirect loop — from "this attempt did not work", which is only
+ * the timeout. Callers that cache a result need the distinction: a permanent
+ * refusal must be remembered so it is never retried, and a timeout must not be.
+ */
+export class BlockedUrlError extends Error {
+  readonly permanent: boolean;
+
+  constructor(message: string, permanent = true) {
+    super(message);
+    this.permanent = permanent;
+  }
+}
 
 function ipv4Blocked(ip: string): boolean {
   const parts = ip.split('.').map(Number);
@@ -144,7 +159,7 @@ export async function guardedFetch(
     await assertFetchable(current);
 
     const remaining = deadline - Date.now();
-    if (remaining <= 0) throw new BlockedUrlError('timed out');
+    if (remaining <= 0) throw new BlockedUrlError('timed out', false);
 
     const headers: Record<string, string> = {
       'user-agent': userAgent,

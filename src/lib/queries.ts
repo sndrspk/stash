@@ -8,11 +8,14 @@
  */
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 
+import { ApiError } from './api-error.js';
 import type { BookmarkRecord } from './db.js';
+import { resolveImages, type ImagePassResult } from './images.js';
 import {
   applySync,
   markLocally,
   purgeExpired,
+  readAllImages,
   readBookmark,
   readUnread,
   restore,
@@ -23,18 +26,10 @@ import type { RemoteBookmark } from './sync.js';
 export const keys = {
   unread: ['bookmarks', 'unread'] as const,
   bookmark: (id: number) => ['bookmarks', id] as const,
+  images: ['images'] as const,
 };
 
-/** A non-2xx from our own functions, carrying enough to explain itself. */
-export class ApiError extends Error {
-  constructor(
-    readonly status: number,
-    readonly detail?: string,
-  ) {
-    super(detail ?? `Request failed with ${status}`);
-    this.name = 'ApiError';
-  }
-}
+export { ApiError };
 
 async function apiFetch(path: string, init?: RequestInit): Promise<unknown> {
   const response = await fetch(path, init);
@@ -91,6 +86,39 @@ export function useSync() {
   });
 }
 
+/** The resolved images, as a map the front page can look an article's URL up in. */
+export function useImageCache() {
+  return useQuery({
+    queryKey: keys.images,
+    queryFn: readAllImages,
+    staleTime: Infinity,
+  });
+}
+
+/**
+ * Resolves images for the unread queue.
+ *
+ * A mutation, and separate from `useSync`, for two reasons. It writes; and it is
+ * slow by design — a few hundred throttled fetches of other people's pages — which
+ * must not be what a refresh waits on. Sync brings the list back in a round trip and
+ * the pictures arrive behind it.
+ *
+ * It resolves only what has no cached answer, so the second run over the same queue
+ * makes no requests at all.
+ */
+export function useResolveImages() {
+  const client = useQueryClient();
+
+  return useMutation<ImagePassResult, Error, readonly string[]>({
+    mutationFn: (urls) => resolveImages(urls),
+    onSuccess: (result) => {
+      if (result.resolved > 0 || result.none > 0 || result.failed > 0) {
+        void client.invalidateQueries({ queryKey: keys.images });
+      }
+    },
+  });
+}
+
 /**
  * Archive or delete, applied locally first and rolled back exactly on failure.
  *
@@ -139,6 +167,9 @@ export async function runStartupPurge(client: QueryClient): Promise<void> {
   const result = await purgeExpired();
   if (result.texts > 0 || result.images > 0) {
     await client.invalidateQueries({ queryKey: ['bookmarks'] });
+  }
+  if (result.images > 0) {
+    await client.invalidateQueries({ queryKey: keys.images });
   }
 }
 
