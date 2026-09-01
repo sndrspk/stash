@@ -442,3 +442,33 @@ export function toFixtureBookmark(raw: FixtureBookmark, seed = 0): FixtureBookma
     hash: raw.hash,
   };
 }
+
+// --- Diagnostics ---
+
+/**
+ * Summarises a `bookmarks/list` response without printing anything from it.
+ *
+ * The point is to distinguish "the folder is empty" from "we did not understand
+ * the response" — so it reports the shape and a tally of entry types, and nothing
+ * else. Titles and URLs are the personal part; a diagnostic has no business
+ * echoing them to a terminal, still less to a bug report.
+ */
+export function describeResponse(raw: unknown): string {
+  if (!Array.isArray(raw)) {
+    return `  Response was ${raw === null ? 'null' : typeof raw}, not an array.`;
+  }
+
+  if (raw.length === 0) return '  Response was an empty array.';
+
+  const tally = new Map<string, number>();
+  for (const item of raw) {
+    const type =
+      typeof item === 'object' && item !== null
+        ? String((item as { type?: unknown }).type ?? '(no type field)')
+        : `(${typeof item})`;
+    tally.set(type, (tally.get(type) ?? 0) + 1);
+  }
+
+  const lines = [...tally].map(([type, count]) => `    ${count} × ${type}`);
+  return `  Response had ${raw.length} entries:\n${lines.join('\n')}`;
+}
