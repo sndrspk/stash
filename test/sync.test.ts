@@ -28,6 +28,75 @@ const remote = (id: number, over: Partial<RemoteBookmark> = {}): RemoteBookmark 
   ...over,
 });
 
+/*
+ * The object form is what Instapaper actually sent on the first real call, and
+ * what an earlier version of this parser silently returned [] for — so every sync
+ * reported an empty unread folder. These tests existed and passed throughout,
+ * because they only asserted the array form. So did the Phase 3 browser run,
+ * against a stub written to the same assumption.
+ *
+ * Both shapes are now covered, and the object cases come first because that is the
+ * one that met reality.
+ */
+describe('parseBookmarkList — object form', () => {
+  it('finds bookmarks under a bookmarks key', () => {
+    const parsed = parseBookmarkList({
+      user: { user_id: 1, username: 'reader' },
+      bookmarks: [
+        { bookmark_id: 10, title: 'A', url: 'https://a', time: 5, hash: 'h' },
+        { bookmark_id: 11, title: 'B', url: 'https://b', time: 6, hash: 'i' },
+      ],
+      highlights: [],
+      delete_ids: [],
+    });
+    expect(parsed.map((b) => b.bookmark_id)).toEqual([10, 11]);
+    expect(parsed[0]?.title).toBe('A');
+  });
+
+  it('does not require entries to carry type: bookmark', () => {
+    // In the object form they sit under their own key and carry no type at all.
+    // Requiring the tag is what made this return nothing.
+    expect(parseBookmarkList({ bookmarks: [{ bookmark_id: 7 }] })).toHaveLength(1);
+  });
+
+  it('is not fooled by other arrays in the object', () => {
+    // delete_ids and highlights are arrays too, and would win by position if the
+    // parser just took the first one it found.
+    const parsed = parseBookmarkList({
+      delete_ids: [101, 102, 103],
+      highlights: [{ highlight_id: 5, text: 'x' }],
+      bookmarks: [{ bookmark_id: 42 }],
+    });
+    expect(parsed.map((b) => b.bookmark_id)).toEqual([42]);
+  });
+
+  it('falls back to any array that looks like bookmarks', () => {
+    // So an upstream key rename degrades into working rather than into an empty
+    // queue, which is the failure mode that cost this phase a round trip.
+    const parsed = parseBookmarkList({
+      user: { user_id: 1 },
+      items: [{ bookmark_id: 99, title: 'Renamed key' }],
+    });
+    expect(parsed.map((b) => b.bookmark_id)).toEqual([99]);
+  });
+
+  it('returns nothing for an object with no bookmarks anywhere', () => {
+    expect(parseBookmarkList({ user: { user_id: 1 }, bookmarks: [] })).toEqual([]);
+    expect(parseBookmarkList({ delete_ids: [1, 2] })).toEqual([]);
+  });
+
+  it('excludes non-bookmark entries that share the array', () => {
+    const parsed = parseBookmarkList({
+      bookmarks: [
+        { type: 'user', user_id: 1, bookmark_id: 999 },
+        { type: 'error', error_code: 1040, bookmark_id: 998 },
+        { bookmark_id: 5 },
+      ],
+    });
+    expect(parsed.map((b) => b.bookmark_id)).toEqual([5]);
+  });
+});
+
 describe('parseBookmarkList', () => {
   it('picks bookmarks out of a heterogeneous response', () => {
     const parsed = parseBookmarkList([

@@ -15,8 +15,27 @@ describe('describeResponse', () => {
   it('distinguishes an empty array from a response of the wrong type', () => {
     expect(describeResponse([])).toContain('empty array');
     expect(describeResponse(null)).toContain('null');
-    expect(describeResponse({})).toContain('object');
+    expect(describeResponse({})).toContain('empty object');
     expect(describeResponse('a string')).toContain('string');
+  });
+
+  it('names an object response’s keys and the shape of each value', () => {
+    /*
+     * The first version reported only "object, not an array". That established
+     * the shape was wrong without saying what it was — a whole round trip to
+     * learn something the response was already carrying. Naming the keys is what
+     * turns "not what I expected" into "here is what it is".
+     */
+    const summary = describeResponse({
+      user: { user_id: 1 },
+      bookmarks: [{ bookmark_id: 1 }, { bookmark_id: 2 }],
+      highlights: [],
+      delete_ids: [7],
+    });
+    expect(summary).toContain('object with keys');
+    expect(summary).toContain('bookmarks: array of 2');
+    expect(summary).toContain('highlights: array of 0');
+    expect(summary).toContain('user: object');
   });
 
   it('tallies entry types so a parser fault is visible', () => {
