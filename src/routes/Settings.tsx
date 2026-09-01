@@ -16,7 +16,11 @@ const EXPLANATION: Record<string, string> = {
   rejected:
     'Instapaper rejected the stored token. It may have been revoked — run `npm run connect` again and replace the two token variables.',
   timeout: 'Instapaper did not respond in time. This is usually temporary.',
-  error: 'Could not reach Instapaper.',
+  // Deliberately not "could not reach Instapaper": a DNS failure, a TLS failure and
+  // a bug in our own code all arrive here, and naming one of them sends the reader
+  // to check their network when the fault may be ours. The detail line below says
+  // what actually happened.
+  error: 'The call to Instapaper did not complete. What went wrong:',
 };
 
 export function Settings() {

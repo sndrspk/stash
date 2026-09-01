@@ -30,7 +30,13 @@ export async function GET(request: Request): Promise<Response> {
   try {
     credentials = credentialsFromEnv(requireEnv);
   } catch (error) {
-    if (error instanceof ConfigError) return json({ error: 'not_configured' }, 503);
+    // Name the variable. This is behind the gate, the only reader is the operator,
+    // and they are the only person who can fix it. Reporting the bare code cost a
+    // round trip: `/api/status` named it and this one did not, so the two screens
+    // disagreed about the same deployment and neither said which variable.
+    if (error instanceof ConfigError) {
+      return json({ error: 'not_configured', detail: error.message }, 503);
+    }
     throw error;
   }
 
