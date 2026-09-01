@@ -204,6 +204,75 @@ describe('anonymizeHtml — responsive images', () => {
   });
 });
 
+/*
+ * The contract these fixtures rest on is that structure survives and content does
+ * not. "Structure" includes every attribute: an anonymiser that quietly dropped one
+ * would produce a file that looks plausible and tests the wrong markup, and there is
+ * nothing in the output to notice it by.
+ *
+ * So this counts elements and attributes across a realistic article and asserts the
+ * totals are unchanged. It also settles what a missing attribute in a written
+ * fixture means: it was missing from what Instapaper returned, because nothing here
+ * can remove one.
+ */
+describe('anonymizeHtml — structural fidelity', () => {
+  const article =
+    '<div class="article-body">' +
+    '<figure><picture>' +
+    '<source media="(min-width: 768px)" type="image/webp" srcset="https://p.example/a-800.webp 800w">' +
+    '<img src="https://p.example/a.jpg" width="1400" height="900" alt="Caption" loading="lazy" decoding="async">' +
+    '</picture><figcaption>Photo by <a href="/staff/name" rel="author">Name</a></figcaption></figure>' +
+    '<p id="intro" data-track="lede">Some real prose here.</p>' +
+    '<table><tr><td colspan="2">Cell</td></tr></table>' +
+    '<pre><code class="language-js">const x = 1;</code></pre>' +
+    '</div>';
+
+  const census = (html: string) => {
+    const elements = [...html.matchAll(/<([a-z]+)((?:\s+[a-z-]+="[^"]*")*)\s*\/?>/g)];
+    return {
+      tags: elements.map((m) => m[1]).sort(),
+      attributes: elements
+        .flatMap((m) => [...(m[2] ?? '').matchAll(/([a-z-]+)=/g)].map((a) => a[1]))
+        .sort(),
+    };
+  };
+
+  it('adds and removes no element and no attribute', () => {
+    const before = census(article);
+
+    // Guard against the comparison passing because it measured nothing — the whole
+    // point is defeated if both sides are empty.
+    expect(before.tags).toContain('source');
+    expect(before.attributes).toContain('srcset');
+    expect(before.attributes.length).toBeGreaterThan(12);
+
+    const after = census(anonymizeHtml(article));
+    expect(after.tags).toEqual(before.tags);
+    expect(after.attributes).toEqual(before.attributes);
+  });
+
+  it('keeps every dimension and structural value verbatim', () => {
+    const output = anonymizeHtml(article);
+    for (const kept of ['width="1400"', 'height="900"', 'colspan="2"', 'loading="lazy"']) {
+      expect(output).toContain(kept);
+    }
+  });
+
+  it('keeps class and id, which Phase 7 selects on', () => {
+    const output = anonymizeHtml(article);
+    expect(output).toContain('class="article-body"');
+    expect(output).toContain('id="intro"');
+    expect(output).toContain('class="language-js"');
+  });
+
+  it('replaces every word of the prose', () => {
+    const output = anonymizeHtml(article);
+    for (const word of ['Some', 'real', 'prose', 'Caption', 'Photo', 'staff']) {
+      expect(output).not.toContain(word);
+    }
+  });
+});
+
 describe('anonymizeUrlLike', () => {
   it('anonymises a relative page path', () => {
     // The leak an earlier version had: only absolute URLs were rewritten, so every
