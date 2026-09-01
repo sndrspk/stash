@@ -1,9 +1,24 @@
+/*
+ * Anchored to the **bar**, not to the button that opens it.
+ *
+ * That distinction is the whole of a bug. Positioned against the button, the panel's
+ * right edge lands wherever the button happens to be — and on a phone the button
+ * sits mid-bar with Archive and Delete to its right, so a 22rem panel extended
+ * 110–138px off the left of the screen. Half of every control was unreachable: the
+ * typeface names were cut to single letters, "Narrow" was gone entirely, and both
+ * sliders began off-screen.
+ *
+ * It is not a phone problem with a phone fix. Anchoring to the button overflows at
+ * any width where the button is not near the right edge, so the fix is to anchor to
+ * the edge the panel should have been aligned with all along. `.bar` is the
+ * positioning context; `.settingsWrap` deliberately is not.
+ */
 .panel {
   position: absolute;
   top: calc(100% + var(--space-2));
-  right: 0;
+  right: var(--space-4);
   z-index: 20;
-  width: min(22rem, calc(100vw - var(--space-8)));
+  width: min(22rem, calc(100vw - var(--space-6)));
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
@@ -13,6 +28,23 @@
   border-radius: var(--radius);
   box-shadow: 0 8px 30px rgb(0 0 0 / 12%);
   font-family: var(--font-ui);
+
+  /*
+   * And never taller than the screen either. The panel is about 480px of controls,
+   * which fits a phone held upright and does not fit one turned sideways — where
+   * the whole viewport is shorter than the panel.
+   */
+  max-height: calc(100dvh - 7rem);
+  overflow-y: auto;
+  /* Scrolling the panel must not scroll the article underneath it. */
+  overscroll-behavior: contain;
+}
+
+@media (max-width: 30rem) {
+  .panel {
+    right: var(--space-3);
+    max-height: calc(100dvh - 6rem);
+  }
 }
 
 .group {

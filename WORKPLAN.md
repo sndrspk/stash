@@ -711,6 +711,32 @@ back from one.
 address-bar problem, and it is chosen by default on phones — but "scrolling avoids the problem" is
 still reasoning rather than observation.
 
+### A fifth phone bug: the settings panel was anchored to the wrong edge
+
+Found on Android, once the reading view itself was good enough to use. The panel was positioned
+against the **"Aa" button** rather than against the bar, so its right edge landed wherever that
+button happened to be — and on a phone the button sits mid-bar with Archive and Delete to its right.
+A 22rem panel anchored there ran **110–138px off the left of the screen**: the typeface names were
+cut to single letters, "Narrow" was gone entirely, and both sliders began off-screen.
+
+It is not a phone problem and it did not get a phone fix. Anchoring to the button overflows at any
+width where the button is not near the right edge — it only *showed* on a phone because that is
+where the bar is crowded. The panel is now anchored to `.bar`, whose right edge is the screen's, and
+`.settingsWrap` is explicitly `position: static` so it cannot become the containing block again by
+accident. It also has a `max-height` and scrolls, because the panel is about 480px of controls and a
+phone turned sideways is shorter than that.
+
+Two things came with it. A tap anywhere else now dismisses the panel — on a phone it covers most of
+the screen, so requiring a second tap on the button underneath it was asking the reader to aim at a
+40px target they cannot see. And the browser run gained the check that would have caught this:
+**every control in the panel is on screen**, not merely the panel's own box, at both phone and
+desktop sizes.
+
+That is the third bug in this phase whose common shape is worth naming: *a measurement that is
+self-consistent tells you nothing about whether the result is usable.* The 0px check passed on an
+unreadable article; the panel's own box was well-formed while half its contents were off-screen.
+Every check added since asks whether a person could use the thing, not whether the numbers agree.
+
 ---
 
 ## Phase 7 — Extraction fallback
