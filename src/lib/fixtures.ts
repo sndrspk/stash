@@ -126,19 +126,28 @@ export const SHAPES = [
 export type Shape = (typeof SHAPES)[number];
 
 /**
- * Whether the `get_text` call for this article completed.
+ * What the `get_text` call for this article actually did.
  *
- * `answered` covers every reply Instapaper actually sent — an article, an error, a
- * 400, an empty body. All of those are facts about the article. `unreachable`
- * covers a transfer that never finished: a timeout, a dropped connection. That is a
- * fact about the network, and it says nothing whatsoever about the article.
+ * Three outcomes, because zero characters of prose has three different causes and
+ * only one of them is a paywall:
+ *
+ * - `article` — Instapaper answered with markup. Usually prose; sometimes a page
+ *   that is all video or embed and has no prose at all. Either way it parsed the
+ *   page and gave us what was on it.
+ * - `refused` — Instapaper answered and the answer contains no article: an HTTP
+ *   error, an error code, or an empty body. **This is the hard paywall.**
+ * - `unreachable` — the transfer never finished. A fact about the network, not
+ *   about the article.
+ *
+ * This has to be carried from the fetch. It cannot be recovered from the
+ * measurements afterwards, and both attempts to recover it picked the wrong article.
  */
-export type Outcome = 'answered' | 'unreachable';
+export type Outcome = 'article' | 'refused' | 'unreachable';
 
 export interface Candidate {
   bookmarkId: number;
   measurements: Measurements;
-  /** Defaults to `answered`; only a failed transfer needs to say otherwise. */
+  /** Defaults to `article`; a refusal or a failed transfer must say so. */
   outcome?: Outcome;
 }
 
@@ -155,14 +164,17 @@ export interface Candidate {
  * says so is more useful than one padded with an article that does not have the
  * property it claims to demonstrate.
  *
- * **Articles whose fetch never completed are dropped before any of this happens.**
- * The first real capture assigned `hard-paywall` to an article that had timed out,
- * because a timeout and a paywall look identical from here — both arrive as zero
- * characters. They are not the same finding at all: one means Instapaper refused to
- * give up the text, which is the property the fixture exists to demonstrate; the
- * other means we never asked successfully. Committing the second labelled as the
- * first is precisely the padding this function is written to avoid, only harder to
- * notice, because the file would look exactly right.
+ * **The paywall shapes are selected on what the response was, never on how much
+ * text it had.** Two captures got this wrong in a row. The first assigned
+ * `hard-paywall` to an article that had timed out; the second, after that was fixed,
+ * assigned it to an article Instapaper had returned 200 and real markup for — a page
+ * that was all embed and no prose. Both were picked by the same faulty rule, `chars
+ * === 0`, which conflates three unrelated things: a refusal, a page with nothing to
+ * say, and a dead connection.
+ *
+ * Only the refusal is the property the fixture exists to demonstrate. So selection
+ * reads `outcome`, which the fetch knows and cannot be recovered from measurements
+ * afterwards, and unreachable candidates are dropped outright.
  */
 export function assignShapes(candidates: readonly Candidate[]): Map<Shape, number> {
   const assigned = new Map<Shape, number>();
@@ -195,9 +207,10 @@ export function assignShapes(candidates: readonly Candidate[]): Map<Shape, numbe
   );
 
   // Instapaper answered and the answer had no article in it — the hardest case, and
-  // the one that must fail with a legible tag rather than an exception. Reachable by
-  // construction: unreachable candidates are already out.
-  claim('hard-paywall', (a) => a.find((c) => c.measurements.chars === 0));
+  // the one that must fail with a legible tag rather than an exception. Note what
+  // this does *not* test: how much prose came back. An article with markup but no
+  // prose is a video page, not a refusal.
+  claim('hard-paywall', (a) => a.find((c) => c.outcome === 'refused'));
 
   claim('image-heavy', (a) =>
     best(

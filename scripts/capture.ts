@@ -90,16 +90,23 @@ interface Captured {
 }
 
 /**
- * `get_text` for one bookmark.
+ * `get_text` for one bookmark, and — the part that matters — what kind of answer it
+ * was.
  *
- * A **refusal** is data, not an error: an article Instapaper cannot parse is exactly
- * the hard-paywall shape the fixture set needs, so it is recorded with an empty body
- * and a note rather than aborting the run.
+ * A **refusal** is data, not an error: an article Instapaper will not give up is
+ * exactly the hard-paywall shape the fixture set needs, so it is recorded with an
+ * empty body and a note rather than aborting the run.
  *
- * A **failed transfer** is neither. It arrives looking identical — zero characters —
- * but it is a fact about the network, not about the article, so it is tagged
- * `unreachable` and `assignShapes` drops it. Without that tag the first real capture
- * labelled a timed-out request as the hard-paywall fixture.
+ * A **failed transfer** is not that. It is a fact about the network, so it is tagged
+ * `unreachable` and dropped from selection entirely.
+ *
+ * And an **article with no prose** — a 200 carrying real markup for a page that is
+ * all video or embed — is not that either. It is an article, and it happens to have
+ * nothing to read.
+ *
+ * All three arrive at `measure()` as zero characters, which is why this distinction
+ * has to be made here and carried. Deriving it downstream picked the wrong article
+ * twice: first a timeout, then a video page.
  */
 async function fetchText(
   id: number,
@@ -114,7 +121,7 @@ async function fetchText(
     );
 
     if (status !== 200) {
-      return { html: '', outcome: 'answered', note: `get_text returned HTTP ${status}` };
+      return { html: '', outcome: 'refused', note: `get_text returned HTTP ${status}` };
     }
 
     // A 200 can still carry an error object rather than an article.
@@ -126,7 +133,7 @@ async function fetchText(
         if (typeof first === 'object' && first !== null && 'error_code' in first) {
           return {
             html: '',
-            outcome: 'answered',
+            outcome: 'refused',
             note: `Instapaper error ${String((first as { error_code: unknown }).error_code)}`,
           };
         }
@@ -135,7 +142,12 @@ async function fetchText(
       }
     }
 
-    return { html: body, outcome: 'answered' };
+    // A 200 with nothing in it is a refusal too — Instapaper answered and the answer
+    // has no article. Markup with no prose is not: that is a real page that happens
+    // to be all video or embed, and it is the case that was misfiled as a paywall.
+    if (!body.trim()) return { html: '', outcome: 'refused', note: 'get_text returned nothing' };
+
+    return { html: body, outcome: 'article' };
   } catch (error) {
     const timedOut = error instanceof Error && error.name === 'TimeoutError';
     return {
@@ -144,6 +156,21 @@ async function fetchText(
       note: timedOut ? 'get_text timed out' : 'get_text was unreachable',
     };
   }
+}
+
+/**
+ * One line saying what came back, in terms that distinguish the cases.
+ *
+ * "0 chars, 0 img, 1 wide" is true of a page with no prose and says nothing about
+ * whether Instapaper refused it — which is exactly the ambiguity that let a video
+ * page be chosen as the paywall fixture and survive a read of the output.
+ */
+function describe(item: Captured): string {
+  if (item.note) return item.note;
+
+  const m = item.measurements;
+  const shape = `${m.chars} chars, ${m.images} img, ${m.wideBlocks} wide`;
+  return m.chars === 0 ? `${shape} — markup, but no prose (not a refusal)` : shape;
 }
 
 async function main(): Promise<void> {
@@ -215,10 +242,9 @@ async function main(): Promise<void> {
     const measurements = measure(html);
     captured.push({ bookmark, html, measurements, outcome, note });
 
-    const label =
-      note ??
-      `${measurements.chars} chars, ${measurements.images} img, ${measurements.wideBlocks} wide`;
-    console.log(`  [${index + 1}/${sample.length}] ${bookmark.bookmark_id}  ${label}`);
+    console.log(
+      `  [${index + 1}/${sample.length}] ${bookmark.bookmark_id}  ${describe(captured.at(-1)!)}`,
+    );
   }
 
   const candidates: Candidate[] = captured.map((c) => ({
@@ -239,10 +265,20 @@ async function main(): Promise<void> {
     );
   }
 
+  /*
+   * Each row says why the article was chosen, not just which one. Without that,
+   * checking the classification means cross-referencing an id against every line
+   * above — and a wrong choice reads as plausible. Two of them did.
+   */
   console.log('\nShapes:');
   for (const shape of SHAPES) {
     const id = assigned.get(shape);
-    console.log(`  ${shape.padEnd(13)} ${id ? `bookmark ${id}` : '— no candidate found'}`);
+    if (!id) {
+      console.log(`  ${shape.padEnd(13)} — no candidate found`);
+      continue;
+    }
+    const item = captured.find((c) => c.bookmark.bookmark_id === id)!;
+    console.log(`  ${shape.padEnd(13)} bookmark ${id}  ${describe(item)}`);
   }
 
   const missing = SHAPES.filter((s) => !assigned.has(s));
@@ -345,8 +381,11 @@ ${rows.join('\n')}
 
 - **soft-paywall** — \`get_text\` returned something, but the truncation heuristic
   says it is not an article. The case Phase 7's extraction fallback exists for.
-- **hard-paywall** — nothing came back at all. Must fail with a legible tag rather
-  than an exception.
+- **hard-paywall** — Instapaper *refused*: an HTTP error, an error code, or an empty
+  body. Must fail with a legible tag rather than an exception. Chosen on what the
+  response was, never on how little prose it had — an article with markup but no
+  prose is a video page, and a timeout is a network fault. Both look identical to a
+  character count, and both have been misfiled here.
 - **image-heavy** — exercises Phase 4's resolution and Phase 6's media clamping.
 - **wide-embeds** — tables, iframes and \`pre\` blocks: the things that overflow a
   column if \`--reading-column-width\` is not applied.
