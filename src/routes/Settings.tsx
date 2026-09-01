@@ -1,14 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+import { TO_UNLOCK, classifyStatusResponse, type Status } from '../lib/status-view';
 import styles from './Settings.module.css';
-
-interface Status {
-  connected: boolean;
-  username?: string;
-  reason?: 'not_configured' | 'rejected' | 'timeout' | 'error';
-  detail?: string;
-}
 
 /** What each failure actually means, and what the operator does about it. */
 const EXPLANATION: Record<string, string> = {
@@ -21,6 +15,10 @@ const EXPLANATION: Record<string, string> = {
   // to check their network when the fault may be ours. The detail line below says
   // what actually happened.
   error: 'The call to Instapaper did not complete. What went wrong:',
+  // The deployment refused before any Instapaper code ran, so nothing here is about
+  // Instapaper — and saying so is the whole point of separating this from `error`.
+  refused:
+    'This deployment refused the request before it reached Instapaper. A 503 saying `not_configured` means `STASH_PASSPHRASE` is not set on it — the gate will not compare against an unset value, so every call is refused.',
 };
 
 export function Settings() {
@@ -34,13 +32,16 @@ export function Settings() {
     void (async () => {
       try {
         const response = await fetch('/api/status');
+        const body: unknown = await response.json().catch(() => null);
+        const view = classifyStatusResponse(response.status, body);
+
         // An expired session lands here; the gate is the answer, not an error.
-        if (response.status === 401) {
+        if (view === TO_UNLOCK) {
           navigate('/unlock', { replace: true });
           return;
         }
-        const body = (await response.json()) as Status;
-        if (!cancelled.current) setStatus(body);
+
+        if (!cancelled.current) setStatus(view);
       } catch {
         if (!cancelled.current) setFailed(true);
       }
