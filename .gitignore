@@ -10,6 +10,11 @@ sessions.*.json
 sessions.txt
 !sessions.example.txt
 
+# Untouched captures from a real account: publishers' article prose and a record
+# of what someone reads. `npm run capture` writes anonymised fixtures alongside
+# these; only those are committed.
+fixtures/.raw/
+
 # Dependencies
 node_modules/
 
