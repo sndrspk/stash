@@ -53,13 +53,23 @@ export async function GET(request: Request): Promise<Response> {
       );
     }
     const timedOut = error instanceof Error && error.name === 'TimeoutError';
-    return json(
-      {
-        connected: false,
-        reason: timedOut ? 'timeout' : 'error',
-        detail: timedOut ? 'Instapaper did not respond within 10s' : 'Could not reach Instapaper',
-      },
-      200,
-    );
+
+    /*
+     * Report what happened, not what it probably means. "Could not reach Instapaper"
+     * discarded the actual error and asserted a cause — and the cause it asserts is
+     * only one of several that land here: a DNS failure, a TLS failure and a
+     * TypeError thrown in our own code all read identically, and the operator is
+     * sent looking at their network when the fault may be ours.
+     *
+     * Safe to include: this is behind the gate, and nothing in a fetch failure
+     * carries a credential.
+     */
+    const detail = timedOut
+      ? 'Instapaper did not respond within 10s'
+      : error instanceof Error
+        ? `${error.name}: ${error.message}`
+        : `Threw a non-Error value: ${typeof error}`;
+
+    return json({ connected: false, reason: timedOut ? 'timeout' : 'error', detail }, 200);
   }
 }

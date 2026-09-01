@@ -41,7 +41,9 @@ export async function handleBookmarkAction(
   try {
     credentials = credentialsFromEnv(requireEnv);
   } catch (error) {
-    if (error instanceof ConfigError) return json({ error: 'not_configured' }, 503);
+    if (error instanceof ConfigError) {
+      return json({ error: 'not_configured', detail: error.message }, 503);
+    }
     throw error;
   }
 
