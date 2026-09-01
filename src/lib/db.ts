@@ -17,7 +17,8 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 
 export const DB_NAME = 'stash';
-export const DB_VERSION = 1;
+/** v2 added `settings`, for the reading preferences. */
+export const DB_VERSION = 2;
 
 /** Seven days, in milliseconds. The grace period before a purge actually happens. */
 export const PURGE_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
@@ -128,7 +129,21 @@ interface StashDB extends DBSchema {
       by_purge_after: number;
     };
   };
+  /**
+   * One row per setting, keyed by name.
+   *
+   * Deliberately not one row holding an object: a store keyed by name lets a later
+   * setting be added without a migration, and the reading preferences are already
+   * normalised field-by-field on read.
+   */
+  settings: {
+    key: string;
+    value: unknown;
+  };
 }
+
+/** The one key `settings` currently holds. */
+export const READING_PREFS_KEY = 'reading';
 
 export type StashDatabase = IDBPDatabase<StashDB>;
 
@@ -143,19 +158,36 @@ let cached: Promise<StashDatabase> | null = null;
  */
 export function getDb(): Promise<StashDatabase> {
   cached ??= openDB<StashDB>(DB_NAME, DB_VERSION, {
-    upgrade(db) {
-      const bookmarks = db.createObjectStore('bookmarks', { keyPath: 'bookmark_id' });
-      bookmarks.createIndex('by_state', 'state');
-      bookmarks.createIndex('by_time', 'time');
-      bookmarks.createIndex('by_purge_after', 'purge_after');
+    /*
+     * Stepwise, and additive.
+     *
+     * `upgrade` runs once with whatever version the device happens to be on, which
+     * for a browser cache is *any* version this app has ever shipped — there is no
+     * deploy that migrates everyone at once. So each version's changes are guarded
+     * by their own `oldVersion` check and none of them touch data written by an
+     * earlier one: a v1 device gets both blocks, a fresh device gets both, and a v2
+     * device gets neither.
+     */
+    upgrade(db, oldVersion) {
+      if (oldVersion < 1) {
+        const bookmarks = db.createObjectStore('bookmarks', { keyPath: 'bookmark_id' });
+        bookmarks.createIndex('by_state', 'state');
+        bookmarks.createIndex('by_time', 'time');
+        bookmarks.createIndex('by_purge_after', 'purge_after');
 
-      const text = db.createObjectStore('article_text', { keyPath: 'key' });
-      text.createIndex('by_bookmark', 'bookmark_id');
-      text.createIndex('by_purge_after', 'purge_after');
+        const text = db.createObjectStore('article_text', { keyPath: 'key' });
+        text.createIndex('by_bookmark', 'bookmark_id');
+        text.createIndex('by_purge_after', 'purge_after');
 
-      const images = db.createObjectStore('image_cache', { keyPath: 'url' });
-      images.createIndex('by_status', 'status');
-      images.createIndex('by_purge_after', 'purge_after');
+        const images = db.createObjectStore('image_cache', { keyPath: 'url' });
+        images.createIndex('by_status', 'status');
+        images.createIndex('by_purge_after', 'purge_after');
+      }
+
+      if (oldVersion < 2) {
+        // No index and no keyPath: the key is the setting's name, passed in.
+        db.createObjectStore('settings');
+      }
     },
     blocking() {
       void closeDb();

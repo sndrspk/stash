@@ -59,6 +59,7 @@
    */
   --reading-column-width: 34em;
   --reading-column-gap: var(--space-12);
+  --reading-font: var(--font-reading);
   --reading-font-size: 1.125rem;
   --reading-line-height: 1.6;
 

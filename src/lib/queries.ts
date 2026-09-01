@@ -11,15 +11,19 @@ import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tansta
 import { ApiError } from './api-error.js';
 import type { BookmarkRecord } from './db.js';
 import { resolveImages, type ImagePassResult } from './images.js';
+import type { ReadingPrefs } from './prefs.js';
 import {
   applySync,
   markLocally,
   purgeExpired,
   readAllImages,
+  readBestText,
   readBookmark,
+  readPrefs,
   readTextFor,
   readUnread,
   restore,
+  writePrefs,
   type ArchiveSnapshot,
 } from './store.js';
 import type { RemoteBookmark } from './sync.js';
@@ -30,6 +34,8 @@ export const keys = {
   bookmark: (id: number) => ['bookmarks', id] as const,
   images: ['images'] as const,
   text: (ids: readonly number[]) => ['text', [...ids].sort((a, b) => a - b)] as const,
+  article: (id: number) => ['article', id] as const,
+  prefs: ['prefs'] as const,
 };
 
 export { ApiError };
@@ -119,6 +125,51 @@ export function useResolveImages() {
         void client.invalidateQueries({ queryKey: keys.images });
       }
     },
+  });
+}
+
+/** The reader's typography settings, and the one mutation that changes them. */
+export function useReadingPrefs() {
+  return useQuery({
+    queryKey: keys.prefs,
+    queryFn: readPrefs,
+    staleTime: Infinity,
+  });
+}
+
+export function useSetReadingPrefs() {
+  const client = useQueryClient();
+
+  return useMutation<ReadingPrefs, Error, ReadingPrefs>({
+    mutationFn: async (prefs) => {
+      await writePrefs(prefs);
+      return prefs;
+    },
+    // Written straight into the query cache rather than invalidated: preferences
+    // apply live, and a round trip through IndexedDB between the reader moving a
+    // slider and the article reflowing would be visible as a stutter.
+    onSuccess: (prefs) => client.setQueryData(keys.prefs, prefs),
+  });
+}
+
+/**
+ * One article's text, from the cache, fetching it if this is the first time.
+ *
+ * Unlike the front page's eager pass this is a query: the reader is waiting for it,
+ * there is exactly one, and there is nothing else to show until it arrives.
+ */
+export function useArticleText(id: number) {
+  return useQuery({
+    queryKey: keys.article(id),
+    queryFn: async () => {
+      const cached = await readBestText(id);
+      if (cached !== undefined) return cached.html;
+
+      await ensureText([{ bookmark_id: id } as BookmarkRecord]);
+      return (await readBestText(id))?.html ?? '';
+    },
+    staleTime: Infinity,
+    enabled: Number.isInteger(id) && id > 0,
   });
 }
 

@@ -6,9 +6,11 @@
  * transaction, so a tab closed mid-sync leaves the cache consistent rather than
  * half-updated.
  */
+import { DEFAULT_PREFS, normalizePrefs, type ReadingPrefs } from './prefs.js';
 import {
   IMAGE_RETRY_MS,
   PURGE_GRACE_MS,
+  READING_PREFS_KEY,
   getDb,
   textKey,
   type ArticleTextRecord,
@@ -250,6 +252,28 @@ export async function writeText(
     fetched_at: now,
     purge_after: null,
   });
+}
+
+// --- reading preferences ---
+
+/**
+ * The stored preferences, normalised.
+ *
+ * A missing row and a corrupt one are the same thing from here: the defaults. There
+ * is nothing in this store worth recovering carefully — they are four values a
+ * reader can set again in seconds — and the reading view must never fail to open
+ * because a preference did not parse.
+ */
+export async function readPrefs(): Promise<ReadingPrefs> {
+  try {
+    return normalizePrefs(await (await getDb()).get('settings', READING_PREFS_KEY));
+  } catch {
+    return { ...DEFAULT_PREFS };
+  }
+}
+
+export async function writePrefs(prefs: ReadingPrefs): Promise<void> {
+  await (await getDb()).put('settings', prefs, READING_PREFS_KEY);
 }
 
 // --- image cache ---
