@@ -55,17 +55,42 @@ export function Reader() {
   const clean = useMemo(() => (html === undefined ? '' : sanitizeArticle(html)), [html]);
   const ready = clean !== '';
 
+  /*
+   * Whether the text already opens with its own headline.
+   *
+   * `get_text` normally returns the body alone, but not always — and a publisher
+   * whose markup keeps the `<h1>` would otherwise get the title printed twice, once
+   * by us and once by them. Compared on the first heading only, and loosely, since
+   * the two spellings differ in punctuation more often than in words.
+   */
+  const titleIsInText = useMemo(() => {
+    const title = bookmark?.title;
+    if (title === undefined || title.trim() === '') return false;
+    const heading = /<h[12][^>]*>([\s\S]*?)<\/h[12]>/i.exec(clean)?.[1];
+    if (heading === undefined) return false;
+    const normalise = (value: string) =>
+      value
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/[^\p{L}\p{N}]+/gu, ' ')
+        .trim()
+        .toLowerCase();
+    return normalise(heading) === normalise(title);
+  }, [clean, bookmark?.title]);
+
   const { state, remeasure } = useColumnLayout(scroller, article, ready);
   const { turn } = useColumnSnap(scroller, article, state.generation, state.gap, ready);
 
   // Preferences apply live. The article is re-measured rather than merely restyled,
   // because every one of the four changes how much vertical space the text needs and
   // therefore how many columns it has to be cut into.
+  // The headline is in the deps because it is part of the article: the bookmark row
+  // resolves after the first render, and inserting a headline afterwards makes the
+  // article taller — which is a re-measure, not a repaint.
   useEffect(() => {
     if (!ready) return;
     const frame = requestAnimationFrame(remeasure);
     return () => cancelAnimationFrame(frame);
-  }, [prefs, ready, remeasure, clean]);
+  }, [prefs, ready, remeasure, clean, bookmark?.title, titleIsInText]);
 
   const failed = archive.error ?? remove.error;
   useEffect(() => {
@@ -181,13 +206,30 @@ export function Reader() {
             extraction fallback is what will eventually get it.
           </p>
         ) : (
-          <article
-            className={styles.article}
-            ref={article}
-            // The trust boundary: `clean` is the only value ever injected, and
-            // `sanitizeArticle` is the only thing that produces it.
-            dangerouslySetInnerHTML={{ __html: clean }}
-          />
+          <article className={styles.article} ref={article}>
+            {/*
+              The headline, which `get_text` does not return — it gives the article
+              body and nothing else. Without this the reading view opened straight
+              into the first paragraph, or into the lead photograph, with the title
+              nowhere on the screen.
+
+              It lives inside the multi-column box rather than in the bar above it,
+              so it flows as the first thing in the first column, the way a headline
+              sits on a page. In the bar it would be a label; here it is the article
+              beginning.
+            */}
+            {!titleIsInText && bookmark && (bookmark.title || '').trim() !== '' && (
+              <header className={styles.headline}>
+                <h1 className={styles.headlineText}>{bookmark.title}</h1>
+                <p className={styles.byline}>{hostOf(bookmark.url)}</p>
+              </header>
+            )}
+            <div
+              // The trust boundary: `clean` is the only value ever injected, and
+              // `sanitizeArticle` is the only thing that produces it.
+              dangerouslySetInnerHTML={{ __html: clean }}
+            />
+          </article>
         )}
       </div>
 

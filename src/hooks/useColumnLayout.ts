@@ -14,7 +14,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { computeColumns } from '../lib/columns.js';
+import { computeColumns, fitColumnWidth } from '../lib/columns.js';
 
 /** Long enough for a chrome collapse to settle, short enough not to be felt. */
 const RESIZE_DEBOUNCE_MS = 120;
@@ -96,9 +96,11 @@ export function useColumnLayout(
       const paddingBottom = Number.parseFloat(styles.paddingBottom) || 0;
       const gap = Number.parseFloat(styles.columnGap) || 0;
 
-      // The column width the reader asked for, resolved from the custom property
-      // to px by the browser rather than parsed out of an `em` string by us.
-      const columnWidth = Number.parseFloat(styles.columnWidth) || box.clientWidth || 1;
+      // The preference, resolved from the custom property to px by the browser
+      // rather than parsed out of an `em` string by us, then clamped to the screen.
+      // See `fitColumnWidth` for why the clamp is not optional.
+      const preferred = Number.parseFloat(styles.columnWidth) || box.clientWidth || 1;
+      const columnWidth = fitColumnWidth(preferred, view.clientWidth - paddingLeft - paddingRight);
 
       /*
        * Where the reader is, as a fraction, so their place survives the reflow.
@@ -109,7 +111,8 @@ export function useColumnLayout(
        * same place.
        */
       const previousExtent = view.scrollWidth - view.clientWidth;
-      const progress = previousExtent > 0 ? view.scrollLeft / previousExtent : 0;
+      const scrollLeftBefore = view.scrollLeft;
+      const progress = previousExtent > 0 ? scrollLeftBefore / previousExtent : 0;
 
       // Reflow to a single column, in place, with the real content and its real
       // images. Nothing paints between here and the restore below: no await, no
@@ -123,6 +126,22 @@ export function useColumnLayout(
       const naturalHeight = box.scrollHeight - paddingTop - paddingBottom;
 
       box.style.cssText = savedStyles;
+
+      /*
+       * Undo what measuring did to the scroll position.
+       *
+       * As one column the article is a few hundred pixels wide instead of fifteen
+       * thousand, so there is nothing left to scroll and **the browser clamps
+       * `scrollLeft` to 0**. Restoring the styles brings the extent back but not the
+       * position, which is now at the top of the article.
+       *
+       * That has to be put right here, before any decision about whether the layout
+       * changed — a measurement that concludes "nothing to do" has still, by this
+       * point, thrown the reader back to the first column. It is the one piece of
+       * damage this function does unconditionally, so it is repaired
+       * unconditionally.
+       */
+      if (view.scrollLeft !== scrollLeftBefore) view.scrollLeft = scrollLeftBefore;
 
       const availableHeight = view.clientHeight - paddingTop - paddingBottom;
       const horizontalPadding = paddingLeft + paddingRight;
@@ -171,22 +190,14 @@ export function useColumnLayout(
         width = apply(columnCount);
       }
 
-      const extent = view.scrollWidth - view.clientWidth;
-      const restored = progress * extent;
-      // Only when it would actually move. Assigning `scrollLeft` cancels an
-      // in-flight smooth scroll, so a measurement that lands on the position the
-      // view already has must not touch it — otherwise a page turn that happens to
-      // coincide with a re-measure is silently thrown away.
-      if (extent > 0 && Math.abs(restored - view.scrollLeft) > 1) view.scrollLeft = restored;
-
       /*
-       * Only announce a measurement that changed something.
+       * A measurement that changed nothing publishes nothing.
        *
        * Every re-measure lands on the same answer unless the viewport, the
-       * preferences or the content moved, and publishing an identical result would
+       * preferences or the content moved, and announcing an identical result would
        * re-render the screen and invalidate the snap's cached stride for nothing.
-       * It is also the last line of defence against a re-measure loop: one that
-       * cannot change the state cannot drive anything downstream of it either.
+       * The reader's position is already correct by this point — it was put back
+       * above — so there is nothing else to do.
        */
       const previous = applied.current;
       if (
@@ -198,6 +209,16 @@ export function useColumnLayout(
         return;
       }
       applied.current = { columnCount, width, gap };
+
+      /*
+       * The layout moved, so the reader's place moves with it — by fraction rather
+       * than by pixel or by column index, since a narrower column means a different
+       * number of columns and "column 11" is no longer the same sentence, while "a
+       * third of the way through" is.
+       */
+      const extent = view.scrollWidth - view.clientWidth;
+      const restored = progress * extent;
+      if (extent > 0 && Math.abs(restored - view.scrollLeft) > 1) view.scrollLeft = restored;
 
       setState((state) => ({
         columnCount,

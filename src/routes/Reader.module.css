@@ -30,6 +30,10 @@
   justify-content: space-between;
   gap: var(--space-4);
   padding: var(--space-3) var(--space-4);
+  /* The notch and the home indicator: without these the first and last controls
+     sit under them on an iPhone, which is where Delete was. */
+  padding-left: max(var(--space-4), env(safe-area-inset-left));
+  padding-right: max(var(--space-4), env(safe-area-inset-right));
   border-bottom: 1px solid var(--rule);
   background: var(--paper);
   font-family: var(--font-ui);
@@ -44,6 +48,33 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-faint);
+}
+
+/*
+ * On a phone the bar has four controls and about 350 usable pixels, so something
+ * has to go. The crumb goes: the article's source is now printed under its own
+ * headline, where it belongs, so in the bar it was only ever a duplicate — and it
+ * was the one element being squeezed to nothing anyway.
+ */
+@media (max-width: 30rem) {
+  .crumb {
+    display: none;
+  }
+
+  .bar {
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    padding-left: max(var(--space-3), env(safe-area-inset-left));
+    padding-right: max(var(--space-3), env(safe-area-inset-right));
+  }
+
+  .action,
+  .danger {
+    padding: var(--space-2);
+    font-size: var(--text-xs);
+    /* Still a comfortable tap target, whatever the label costs in width. */
+    min-height: 2.5rem;
+  }
 }
 
 .actions {
@@ -135,8 +166,51 @@
 
 @media (max-width: 40rem) {
   .article {
-    padding: var(--space-6) var(--space-5) var(--space-8);
+    /* `--space-5` does not exist on the scale. Written here once, it made the whole
+       shorthand invalid, so the article had *no* padding at all on a phone — and
+       the column clamp, which subtracts that padding, then let a column fill the
+       screen edge to edge. */
+    padding: var(--space-6) var(--space-4) var(--space-8);
+    padding-left: max(var(--space-4), env(safe-area-inset-left));
+    padding-right: max(var(--space-4), env(safe-area-inset-right));
+
+    /*
+     * The gutter equals the two side paddings, and that equality is doing real
+     * work rather than looking tidy. A column is the viewport minus its padding,
+     * so a stride — column plus gutter — is exactly one screen only when the
+     * gutter matches the padding it replaces. Set it wider and every page after
+     * the first sits a little further left than the last, with the text pressed
+     * against one edge and a growing margin at the other.
+     */
+    column-gap: var(--space-8);
   }
+}
+
+/* --- the headline --- */
+
+.headline {
+  margin-bottom: 1.2em;
+  /* Kept whole: a headline split across a column break is the one break nobody
+     would ever choose. */
+  break-inside: avoid;
+  break-after: avoid;
+}
+
+.headlineText {
+  font-size: 1.7em;
+  line-height: var(--leading-tight);
+  letter-spacing: -0.01em;
+  font-weight: 600;
+  margin: 0 0 0.3em;
+}
+
+.byline {
+  font-family: var(--font-ui);
+  font-size: 0.7em;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin: 0;
 }
 
 /* Two lines, never one: a single stray line at a column break pulls a second

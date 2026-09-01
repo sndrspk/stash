@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { computeColumns, pageStride, snapTarget, strideFromBox } from '../src/lib/columns';
+import {
+  computeColumns,
+  fitColumnWidth,
+  pageStride,
+  snapTarget,
+  strideFromBox,
+} from '../src/lib/columns';
 
 /** A plausible desktop reading view: 34em columns at 18px, in an 800px-tall window. */
 const DESKTOP = {
@@ -9,6 +15,42 @@ const DESKTOP = {
   gap: 48,
   horizontalPadding: 96,
 };
+
+describe('fitColumnWidth', () => {
+  it('leaves a preference that fits alone', () => {
+    expect(fitColumnWidth(612, 1184)).toBe(612);
+  });
+
+  it('shrinks a column that is wider than the screen', () => {
+    // Medium is 34em — 612px at 18px — on a 390px phone. Unclamped the reader sees
+    // 60% of a column and every line runs off the right edge, while every
+    // measurement we take says the layout is correct.
+    expect(fitColumnWidth(612, 358)).toBe(358);
+  });
+
+  it('makes a clamped column plus its padding exactly one screen', () => {
+    const viewport = 390;
+    const padding = 32;
+    expect(fitColumnWidth(612, viewport - padding) + padding).toBe(viewport);
+  });
+
+  it('holds for every preset on every phone worth caring about', () => {
+    // 22em, 34em and 56em at 18px, against the narrow end of the range.
+    for (const preferred of [396, 612, 1008]) {
+      for (const viewport of [320, 360, 390, 430]) {
+        const available = viewport - 32;
+        expect(fitColumnWidth(preferred, available)).toBeLessThanOrEqual(available);
+      }
+    }
+  });
+
+  it('falls back rather than returning nonsense before layout', () => {
+    expect(fitColumnWidth(612, 0)).toBe(612);
+    expect(fitColumnWidth(612, -10)).toBe(612);
+    expect(fitColumnWidth(612, NaN)).toBe(612);
+    expect(fitColumnWidth(0, 358)).toBe(358);
+  });
+});
 
 describe('computeColumns', () => {
   it('gives one column to an article that fits on one screen', () => {
