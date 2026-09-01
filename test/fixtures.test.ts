@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   anonymizeHtml,
   anonymizeText,
+  anonymizeSrcset,
   anonymizeUrl,
   anonymizeUrlLike,
   assignShapes,
@@ -99,6 +100,176 @@ describe('anonymizeUrl', () => {
 
   it('falls back to a safe URL for junk', () => {
     expect(anonymizeUrl('nonsense')).toBe('https://example.com/');
+  });
+});
+
+/*
+ * The first fixtures written from a real account came out with srcsets like
+ *
+ *   srcset="https://example.com/sit/a.webp%20800w,%20https:/dolorelittempor.com/b.webp%201400w"
+ *
+ * which is not a srcset at all. The whole list had been handed to the single-URL
+ * path, so `new URL()` took it as one pathname: commas and spaces percent-encoded
+ * into one giant segment, descriptors swallowed inside it, and a segment ending in
+ * `.com` re-emerging as a second hostname.
+ *
+ * These fixtures exist for Phase 4's image resolution and Phase 6's media clamping,
+ * and those read the descriptors to choose a source and know how wide it is.
+ */
+describe('anonymizeSrcset', () => {
+  it('keeps the list a list, with every descriptor intact', () => {
+    const output = anonymizeSrcset(
+      'https://media.publisher.example/hero-800.jpg 800w, https://media.publisher.example/hero-1400.jpg 1400w',
+    );
+    expect(output.split(', ')).toHaveLength(2);
+    expect(output).toContain(' 800w');
+    expect(output).toContain(' 1400w');
+    expect(output).not.toContain('%20');
+  });
+
+  it('keeps pixel-density descriptors too', () => {
+    expect(anonymizeSrcset('/a/hero.jpg 1x, /a/hero@2x.jpg 2x')).toMatch(/ 1x, .* 2x$/);
+  });
+
+  it('handles a bare url with no descriptor', () => {
+    expect(anonymizeSrcset('https://media.publisher.example/hero.jpg').trim()).toBe(
+      anonymizeSrcset('https://media.publisher.example/hero.jpg'),
+    );
+    expect(anonymizeSrcset('/a/hero.jpg')).not.toContain(' ');
+  });
+
+  it('invents no hostname other than example.com', () => {
+    // The corrupted form produced `https:/dolorelittempor.com/...` out of a path
+    // segment, which reads as a real third-party host in a committed fixture.
+    const output = anonymizeSrcset(
+      'https://a.publisher.example/x.jpg 1x, https://b.publisher.example/y.jpg 2x',
+    );
+    expect([...output.matchAll(/https?:\/\/([^/\s]+)/g)].map((m) => m[1])).toEqual([
+      'example.com',
+      'example.com',
+    ]);
+  });
+
+  it('leaks no part of the publisher', () => {
+    const output = anonymizeSrcset('https://media.publisher.example/news/hero-800.jpg 800w');
+    expect(output).not.toContain('publisher');
+    expect(output).not.toContain('news');
+    expect(output).toContain('.jpg');
+  });
+
+  it('leaves a data: srcset alone rather than cutting it at a comma', () => {
+    const data = 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
+    expect(anonymizeSrcset(data)).toBe(data);
+  });
+
+  it('survives empty and ragged input', () => {
+    expect(anonymizeSrcset('')).toBe('');
+    expect(() => anonymizeSrcset(',,  ,')).not.toThrow();
+  });
+});
+
+describe('anonymizeHtml — responsive images', () => {
+  it('rewrites srcset on source and img, keeping the markup valid', () => {
+    const output = anonymizeHtml(
+      '<picture>' +
+        '<source media="(min-width: 768px)" type="image/webp" ' +
+        'srcset="https://media.publisher.example/hero-800.webp 800w">' +
+        '<img src="https://media.publisher.example/hero.jpg" width="1400" height="900">' +
+        '</picture>',
+    );
+    expect(output).toContain('srcset="https://example.com/');
+    expect(output).toContain('800w');
+    expect(output).not.toContain('publisher.example');
+    // Dimensions and art-direction metadata are structure, and must survive.
+    expect(output).toContain('width="1400"');
+    expect(output).toContain('media="(min-width: 768px)"');
+    expect(output).toContain('type="image/webp"');
+  });
+
+  it('rewrites the lazy-loading attributes as well', () => {
+    /*
+     * data-srcset was in no list at all, so a lazyload image — extremely common —
+     * carried the publisher's real URL straight into a committed fixture. data-src
+     * was already handled; its sibling was not.
+     */
+    const output = anonymizeHtml(
+      '<img class="lazyload" data-src="https://media.publisher.example/hero.jpg" ' +
+        'data-srcset="https://media.publisher.example/hero-800.jpg 800w" ' +
+        'src="data:image/gif;base64,R0lGOD">',
+    );
+    expect(output).not.toContain('publisher.example');
+    expect(output).toContain('800w');
+    // The class is a CSS hook Phase 7 selects on, and is deliberately kept.
+    expect(output).toContain('class="lazyload"');
+  });
+});
+
+/*
+ * The contract these fixtures rest on is that structure survives and content does
+ * not. "Structure" includes every attribute: an anonymiser that quietly dropped one
+ * would produce a file that looks plausible and tests the wrong markup, and there is
+ * nothing in the output to notice it by.
+ *
+ * So this counts elements and attributes across a realistic article and asserts the
+ * totals are unchanged. It also settles what a missing attribute in a written
+ * fixture means: it was missing from what Instapaper returned, because nothing here
+ * can remove one.
+ */
+describe('anonymizeHtml — structural fidelity', () => {
+  const article =
+    '<div class="article-body">' +
+    '<figure><picture>' +
+    '<source media="(min-width: 768px)" type="image/webp" srcset="https://p.example/a-800.webp 800w">' +
+    '<img src="https://p.example/a.jpg" width="1400" height="900" alt="Caption" loading="lazy" decoding="async">' +
+    '</picture><figcaption>Photo by <a href="/staff/name" rel="author">Name</a></figcaption></figure>' +
+    '<p id="intro" data-track="lede">Some real prose here.</p>' +
+    '<table><tr><td colspan="2">Cell</td></tr></table>' +
+    '<pre><code class="language-js">const x = 1;</code></pre>' +
+    '</div>';
+
+  const census = (html: string) => {
+    const elements = [...html.matchAll(/<([a-z]+)((?:\s+[a-z-]+="[^"]*")*)\s*\/?>/g)];
+    return {
+      tags: elements.map((m) => m[1]).sort(),
+      attributes: elements
+        .flatMap((m) => [...(m[2] ?? '').matchAll(/([a-z-]+)=/g)].map((a) => a[1]))
+        .sort(),
+    };
+  };
+
+  it('adds and removes no element and no attribute', () => {
+    const before = census(article);
+
+    // Guard against the comparison passing because it measured nothing — the whole
+    // point is defeated if both sides are empty.
+    expect(before.tags).toContain('source');
+    expect(before.attributes).toContain('srcset');
+    expect(before.attributes.length).toBeGreaterThan(12);
+
+    const after = census(anonymizeHtml(article));
+    expect(after.tags).toEqual(before.tags);
+    expect(after.attributes).toEqual(before.attributes);
+  });
+
+  it('keeps every dimension and structural value verbatim', () => {
+    const output = anonymizeHtml(article);
+    for (const kept of ['width="1400"', 'height="900"', 'colspan="2"', 'loading="lazy"']) {
+      expect(output).toContain(kept);
+    }
+  });
+
+  it('keeps class and id, which Phase 7 selects on', () => {
+    const output = anonymizeHtml(article);
+    expect(output).toContain('class="article-body"');
+    expect(output).toContain('id="intro"');
+    expect(output).toContain('class="language-js"');
+  });
+
+  it('replaces every word of the prose', () => {
+    const output = anonymizeHtml(article);
+    for (const word of ['Some', 'real', 'prose', 'Caption', 'Photo', 'staff']) {
+      expect(output).not.toContain(word);
+    }
   });
 });
 

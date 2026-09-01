@@ -294,8 +294,11 @@ export function anonymizeText(text: string, seed = 0): string {
   });
 }
 
-/** Attributes that carry a URL and therefore a publisher's identity. */
-const URL_ATTRS = ['href', 'src', 'srcset', 'poster', 'data-src', 'content'];
+/** Attributes carrying a single URL, and therefore a publisher's identity. */
+const URL_ATTRS = ['href', 'src', 'poster', 'data-src', 'content'];
+
+/** Attributes carrying a srcset: a comma-separated list, not one URL. */
+const SRCSET_ATTRS = ['srcset', 'imagesrcset', 'data-srcset'];
 
 /**
  * Rewrites a document so it keeps its structure and loses its content.
@@ -372,6 +375,16 @@ function walkAnonymizing(node: unknown, seed: { n: number }): void {
         }
       }
     }
+    for (const attr of SRCSET_ATTRS) {
+      const value = child.getAttribute?.(attr);
+      if (value) {
+        const rewritten = anonymizeSrcset(value, seed.n);
+        if (rewritten !== value) {
+          child.setAttribute?.(attr, rewritten);
+          seed.n++;
+        }
+      }
+    }
     // alt and title are prose too.
     for (const attr of ['alt', 'title']) {
       const value = child.getAttribute?.(attr);
@@ -380,6 +393,39 @@ function walkAnonymizing(node: unknown, seed: { n: number }): void {
 
     walkAnonymizing(child, seed);
   }
+}
+
+/**
+ * Anonymises a `srcset`, which is a list and not a URL.
+ *
+ * Passing one to the single-URL path does not merely lose fidelity, it produces
+ * markup that is no longer a srcset: `new URL()` accepts the whole list as one
+ * pathname, so the commas and spaces are percent-encoded into a single enormous
+ * segment, the `800w` / `2x` descriptors disappear inside it, and a path segment
+ * that happened to end in `.com` comes back out looking like a second hostname.
+ *
+ * That was the state the first written fixtures were in. It matters because these
+ * exist for Phase 4's image resolution and Phase 6's media clamping, both of which
+ * read exactly these descriptors to decide which source to use and how wide it is.
+ *
+ * Each entry is split on whitespace so the URL is anonymised and every descriptor
+ * kept verbatim. A `data:` srcset is returned untouched: splitting on commas would
+ * cut it in half, and it carries nothing worth removing.
+ */
+export function anonymizeSrcset(value: string, seed = 0): string {
+  if (/^\s*data:/i.test(value)) return value;
+
+  return value
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry, i) => {
+      // "url", "url 2x", "url 1400w" — the URL is the first token, the rest are
+      // descriptors and are measurements rather than anything identifying.
+      const [url, ...descriptors] = entry.split(/\s+/);
+      return [anonymizeUrlLike(url ?? '', seed + i), ...descriptors].join(' ');
+    })
+    .join(', ');
 }
 
 /**
