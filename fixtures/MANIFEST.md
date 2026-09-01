@@ -18,7 +18,7 @@ Each file is one article, chosen because it exhibits the shape in its row.
 
 | Shape | File | Measured |
 | --- | --- | --- |
-| `soft-paywall` | — | no candidate in the captured sample |
+| `soft-paywall` | `../soft-paywall-stub.html` + `../soft-paywall-full.html` | hand-built for the Phase 7a extraction probe, not from this capture |
 | `hard-paywall` | `text/hard-paywall.html` | get_text returned HTTP 400 |
 | `image-heavy` | `text/image-heavy.html` | 13076 chars, 33 p, 62 img, 0 wide |
 | `wide-embeds` | `text/wide-embeds.html` | 11018 chars, 75 p, 4 img, 9 wide |
@@ -38,9 +38,16 @@ Each file is one article, chosen because it exhibits the shape in its row.
 - **very-long** — the case where Phase 6's deterministic column count matters most.
 - **short** — fewer columns than the viewport can show, which is its own edge.
 
-A shape with no file had no candidate among the 41 articles sampled. Re-run
-with a larger `--limit` to widen the search, or leave the gap: an honest hole beats a
-file that does not have the property its row claims.
+A shape whose row reads `—` had no candidate among the 41 articles sampled.
+Re-run with a larger `--limit` to widen the search, or leave the gap: an honest hole
+beats a file that does not have the property its row claims.
+
+A row naming a file outside `text/` is a **standing fixture**: it covers that shape
+independently of any capture and is not overwritten by one. `soft-paywall` is the
+case — it needs a stub *and* the full page it is compared against, which is a pair no
+single captured article can be, so it was built by hand for the Phase 7a extraction
+probe. That distinction matters when reading the table: constructed to have a property
+and found to have it are different claims.
 
 Articles whose `get_text` call never completed are excluded from selection entirely. A
 timeout arrives looking exactly like a hard paywall — zero characters — but it is a

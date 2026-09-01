@@ -37,6 +37,7 @@ import {
   type FixtureBookmark,
   type Measurements,
   type Outcome,
+  type Shape,
 } from '../src/lib/fixtures.js';
 import { callText, credentialsFromEnv, call } from '../src/lib/instapaper.js';
 import { parseBookmarkList } from '../src/lib/sync.js';
@@ -46,6 +47,25 @@ const RAW = 'fixtures/.raw';
 
 /** Polite spacing between calls. A one-off capture has no reason to hurry. */
 const DELAY_MS = 700;
+
+/**
+ * Fixtures that already cover a shape, independently of any capture.
+ *
+ * Without this the manifest reports `soft-paywall` as having no candidate, which is
+ * true of the sample and misleading about the fixture set: the case is covered, by a
+ * hand-built pair committed for the Phase 7a extraction probe. A reader comparing the
+ * table against the plan's six shapes would conclude a case was untested when it is
+ * the one case with *two* files — the stub and the full page it is compared to.
+ *
+ * Their provenance is different from a captured file and the row says so, because
+ * "constructed to have this property" and "found to have it" are different claims.
+ */
+const STANDING: Partial<Record<Shape, { files: string; note: string }>> = {
+  'soft-paywall': {
+    files: '`../soft-paywall-stub.html` + `../soft-paywall-full.html`',
+    note: 'hand-built for the Phase 7a extraction probe, not from this capture',
+  },
+};
 
 /** How many bookmark records land in bookmarks.json. */
 const RECORD_COUNT = 20;
@@ -274,14 +294,19 @@ async function main(): Promise<void> {
   for (const shape of SHAPES) {
     const id = assigned.get(shape);
     if (!id) {
-      console.log(`  ${shape.padEnd(13)} — no candidate found`);
+      const standing = STANDING[shape];
+      console.log(
+        `  ${shape.padEnd(13)} ${standing ? `already covered — ${standing.note}` : '— no candidate found'}`,
+      );
       continue;
     }
     const item = captured.find((c) => c.bookmark.bookmark_id === id)!;
     console.log(`  ${shape.padEnd(13)} bookmark ${id}  ${describe(item)}`);
   }
 
-  const missing = SHAPES.filter((s) => !assigned.has(s));
+  // A shape with a standing fixture is not missing, so widening the sample for it
+  // would be advice to solve a problem that does not exist.
+  const missing = SHAPES.filter((s) => !assigned.has(s) && !STANDING[s]);
   if (missing.length) {
     /*
      * The advice has to reflect the run that just happened. A hard-coded
@@ -320,7 +345,12 @@ async function main(): Promise<void> {
   for (const shape of SHAPES) {
     const id = assigned.get(shape);
     if (!id) {
-      manifest.push(`| \`${shape}\` | — | no candidate in the captured sample |`);
+      const standing = STANDING[shape];
+      manifest.push(
+        standing
+          ? `| \`${shape}\` | ${standing.files} | ${standing.note} |`
+          : `| \`${shape}\` | — | no candidate in the captured sample |`,
+      );
       continue;
     }
     const item = captured.find((c) => c.bookmark.bookmark_id === id)!;
@@ -392,9 +422,16 @@ ${rows.join('\n')}
 - **very-long** — the case where Phase 6's deterministic column count matters most.
 - **short** — fewer columns than the viewport can show, which is its own edge.
 
-A shape with no file had no candidate among the ${sampleSize} articles sampled. Re-run
-with a larger \`--limit\` to widen the search, or leave the gap: an honest hole beats a
-file that does not have the property its row claims.
+A shape whose row reads \`—\` had no candidate among the ${sampleSize} articles sampled.
+Re-run with a larger \`--limit\` to widen the search, or leave the gap: an honest hole
+beats a file that does not have the property its row claims.
+
+A row naming a file outside \`text/\` is a **standing fixture**: it covers that shape
+independently of any capture and is not overwritten by one. \`soft-paywall\` is the
+case — it needs a stub *and* the full page it is compared against, which is a pair no
+single captured article can be, so it was built by hand for the Phase 7a extraction
+probe. That distinction matters when reading the table: constructed to have a property
+and found to have it are different claims.
 
 Articles whose \`get_text\` call never completed are excluded from selection entirely. A
 timeout arrives looking exactly like a hard paywall — zero characters — but it is a
