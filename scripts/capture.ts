@@ -36,6 +36,7 @@ import {
   type Candidate,
   type FixtureBookmark,
   type Measurements,
+  type Outcome,
 } from '../src/lib/fixtures.js';
 import { callText, credentialsFromEnv, call } from '../src/lib/instapaper.js';
 import { parseBookmarkList } from '../src/lib/sync.js';
@@ -48,6 +49,17 @@ const DELAY_MS = 700;
 
 /** How many bookmark records land in bookmarks.json. */
 const RECORD_COUNT = 20;
+
+/**
+ * How many bookmarks to ask `bookmarks/list` for — the API's maximum.
+ *
+ * Only `--limit` of them are fetched for text, so this costs one response rather
+ * than N calls. It is deliberately larger than any sample: asking for exactly as
+ * many as we intend to sample makes "the list came back full" and "that is the whole
+ * folder" indistinguishable, and then no advice about widening the sample can be
+ * honest. With headroom, a short list means a short folder.
+ */
+const LIST_LIMIT = 500;
 
 const flag = (name: string) => argv.includes(`--${name}`);
 const option = (name: string, fallback: number): number => {
@@ -73,20 +85,26 @@ interface Captured {
   bookmark: FixtureBookmark;
   html: string;
   measurements: Measurements;
+  outcome: Outcome;
   note?: string;
 }
 
 /**
  * `get_text` for one bookmark.
  *
- * A failure is data, not an error: an article Instapaper cannot parse is exactly
- * the hard-paywall shape the fixture set needs, so it is recorded with an empty
- * body and a note rather than aborting the run.
+ * A **refusal** is data, not an error: an article Instapaper cannot parse is exactly
+ * the hard-paywall shape the fixture set needs, so it is recorded with an empty body
+ * and a note rather than aborting the run.
+ *
+ * A **failed transfer** is neither. It arrives looking identical — zero characters —
+ * but it is a fact about the network, not about the article, so it is tagged
+ * `unreachable` and `assignShapes` drops it. Without that tag the first real capture
+ * labelled a timed-out request as the hard-paywall fixture.
  */
 async function fetchText(
   id: number,
   credentials: ReturnType<typeof credentialsFromEnv>,
-): Promise<{ html: string; note?: string }> {
+): Promise<{ html: string; outcome: Outcome; note?: string }> {
   try {
     const { status, body } = await callText(
       '/api/1.1/bookmarks/get_text',
@@ -95,7 +113,9 @@ async function fetchText(
       AbortSignal.timeout(30_000),
     );
 
-    if (status !== 200) return { html: '', note: `get_text returned HTTP ${status}` };
+    if (status !== 200) {
+      return { html: '', outcome: 'answered', note: `get_text returned HTTP ${status}` };
+    }
 
     // A 200 can still carry an error object rather than an article.
     const trimmed = body.trimStart();
@@ -106,6 +126,7 @@ async function fetchText(
         if (typeof first === 'object' && first !== null && 'error_code' in first) {
           return {
             html: '',
+            outcome: 'answered',
             note: `Instapaper error ${String((first as { error_code: unknown }).error_code)}`,
           };
         }
@@ -114,10 +135,14 @@ async function fetchText(
       }
     }
 
-    return { html: body };
+    return { html: body, outcome: 'answered' };
   } catch (error) {
     const timedOut = error instanceof Error && error.name === 'TimeoutError';
-    return { html: '', note: timedOut ? 'get_text timed out' : 'get_text was unreachable' };
+    return {
+      html: '',
+      outcome: 'unreachable',
+      note: timedOut ? 'get_text timed out' : 'get_text was unreachable',
+    };
   }
 }
 
@@ -150,7 +175,7 @@ async function main(): Promise<void> {
     '/api/1.1/bookmarks/list',
     [
       ['folder_id', folder],
-      ['limit', String(Math.max(limit, RECORD_COUNT))],
+      ['limit', String(LIST_LIMIT)],
     ],
     credentials,
     AbortSignal.timeout(30_000),
@@ -186,9 +211,9 @@ async function main(): Promise<void> {
   const captured: Captured[] = [];
   for (const [index, bookmark] of sample.entries()) {
     if (index > 0) await sleep(DELAY_MS);
-    const { html, note } = await fetchText(bookmark.bookmark_id, credentials);
+    const { html, outcome, note } = await fetchText(bookmark.bookmark_id, credentials);
     const measurements = measure(html);
-    captured.push({ bookmark, html, measurements, note });
+    captured.push({ bookmark, html, measurements, outcome, note });
 
     const label =
       note ??
@@ -199,8 +224,20 @@ async function main(): Promise<void> {
   const candidates: Candidate[] = captured.map((c) => ({
     bookmarkId: c.bookmark.bookmark_id,
     measurements: c.measurements,
+    outcome: c.outcome,
   }));
   const assigned = assignShapes(candidates);
+
+  const unreachable = captured.filter((c) => c.outcome === 'unreachable').length;
+  if (unreachable) {
+    // Said plainly, because it means the sample was smaller than the number above:
+    // these are excluded from every shape, a timeout being a fact about the network
+    // rather than about the article.
+    console.log(
+      `\n${unreachable} of ${sample.length} never completed and are excluded from the\n` +
+        'shapes below. Re-running usually reaches them.',
+    );
+  }
 
   console.log('\nShapes:');
   for (const shape of SHAPES) {
@@ -210,10 +247,24 @@ async function main(): Promise<void> {
 
   const missing = SHAPES.filter((s) => !assigned.has(s));
   if (missing.length) {
+    /*
+     * The advice has to reflect the run that just happened. A hard-coded
+     * "re-run with --limit 40" told someone who had just used --limit 40 to do the
+     * thing they had already done, and said nothing about the case where widening is
+     * not even possible because the sample was the whole folder.
+     */
+    const room = bookmarks.length - sample.length;
+    const truncatedList = bookmarks.length >= LIST_LIMIT;
     console.log(
-      `\nNote: ${missing.length} shape(s) had no candidate in this sample. Re-run with\n` +
-        '`--limit 40` to widen it, or accept the gap — a fixture set that says a shape\n' +
-        'is missing beats one padded with an article that lacks the property.',
+      `\nNote: ${missing.length} shape(s) had no candidate among the ${sample.length} sampled.\n` +
+        (room > 0
+          ? `Re-run with \`--limit ${Math.min(limit * 2, bookmarks.length)}\` to widen it — ` +
+            `${room} more ${truncatedList ? 'were listed' : 'in the folder'}.\n` +
+            'Or accept the gap: a fixture set that says a shape is missing beats one\n' +
+            'padded with an article that lacks the property.'
+          : 'That was every bookmark listed, so widening will not help — the shape is\n' +
+            'simply not present. A fixture set that says so beats one padded with an\n' +
+            'article that lacks the property.'),
     );
   }
 
@@ -248,7 +299,7 @@ async function main(): Promise<void> {
     );
   }
 
-  await writeFile(`${OUT}/MANIFEST.md`, renderManifest(manifest, records.length));
+  await writeFile(`${OUT}/MANIFEST.md`, renderManifest(manifest, records.length, sample.length));
 
   if (keepRaw) {
     await rm(RAW, { recursive: true, force: true });
@@ -269,7 +320,7 @@ async function main(): Promise<void> {
   console.log('never commit a fixture you have not read, and that is still the rule.\n');
 }
 
-function renderManifest(rows: string[], recordCount: number): string {
+function renderManifest(rows: string[], recordCount: number, sampleSize: number): string {
   return `# Fixtures
 
 Generated by \`npm run capture\` from a real Instapaper account, then **anonymised**:
@@ -302,8 +353,13 @@ ${rows.join('\n')}
 - **very-long** — the case where Phase 6's deterministic column count matters most.
 - **short** — fewer columns than the viewport can show, which is its own edge.
 
-A shape with no file had no candidate in the captured sample. Re-run with
-\`--limit 40\` to widen the search.
+A shape with no file had no candidate among the ${sampleSize} articles sampled. Re-run
+with a larger \`--limit\` to widen the search, or leave the gap: an honest hole beats a
+file that does not have the property its row claims.
+
+Articles whose \`get_text\` call never completed are excluded from selection entirely. A
+timeout arrives looking exactly like a hard paywall — zero characters — but it is a
+fact about the network, not about the article.
 
 ## Bookmark records
 

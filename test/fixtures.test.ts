@@ -298,6 +298,51 @@ describe('assignShapes', () => {
     expect(assigned.get('hard-paywall')).toBe(9);
   });
 
+  /*
+   * The first real capture labelled a timed-out request as the hard-paywall fixture.
+   * Nothing in the measurements could have told them apart — a paywall and a dropped
+   * connection both arrive as zero characters — so the distinction has to be carried
+   * from the fetch, and these pin that it is.
+   */
+  describe('a fetch that never completed', () => {
+    const unreachable = (id: number): Candidate => ({
+      bookmarkId: id,
+      measurements: { chars: 0, paragraphs: 0, images: 0, wideBlocks: 0, truncated: true },
+      outcome: 'unreachable',
+    });
+
+    it('is not the hard paywall', () => {
+      // The property the fixture demonstrates is Instapaper refusing the text. A
+      // timeout is not that; it is us never having asked successfully.
+      expect(assignShapes([unreachable(1)]).has('hard-paywall')).toBe(false);
+    });
+
+    it('does not beat a genuine refusal that came later in the sample', () => {
+      // The order this failed in: the timeout was first, so `find` took it and the
+      // real 400 further down the list went unused.
+      const assigned = assignShapes([unreachable(1), candidate(2, { chars: 0, truncated: true })]);
+      expect(assigned.get('hard-paywall')).toBe(2);
+    });
+
+    it('is excluded from every other shape too', () => {
+      const assigned = assignShapes([unreachable(1)]);
+      expect(assigned.size).toBe(0);
+    });
+
+    it('leaves the rest of the sample alone', () => {
+      const assigned = assignShapes([
+        unreachable(1),
+        candidate(2, { chars: 30000, images: 9 }),
+        candidate(3, { chars: 12000 }),
+        candidate(4, { chars: 600 }),
+      ]);
+      expect(assigned.get('image-heavy')).toBe(2);
+      expect(assigned.get('very-long')).toBe(3);
+      expect(assigned.get('short')).toBe(4);
+      expect([...assigned.values()]).not.toContain(1);
+    });
+  });
+
   it('never assigns one article to two shapes', () => {
     const assigned = assignShapes([
       candidate(1, { images: 10, wideBlocks: 4, chars: 50000 }),
