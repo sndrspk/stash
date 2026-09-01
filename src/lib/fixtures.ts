@@ -125,9 +125,21 @@ export const SHAPES = [
 
 export type Shape = (typeof SHAPES)[number];
 
+/**
+ * Whether the `get_text` call for this article completed.
+ *
+ * `answered` covers every reply Instapaper actually sent — an article, an error, a
+ * 400, an empty body. All of those are facts about the article. `unreachable`
+ * covers a transfer that never finished: a timeout, a dropped connection. That is a
+ * fact about the network, and it says nothing whatsoever about the article.
+ */
+export type Outcome = 'answered' | 'unreachable';
+
 export interface Candidate {
   bookmarkId: number;
   measurements: Measurements;
+  /** Defaults to `answered`; only a failed transfer needs to say otherwise. */
+  outcome?: Outcome;
 }
 
 /**
@@ -142,13 +154,24 @@ export interface Candidate {
  * A shape with no candidate is simply absent from the result. A fixture set that
  * says so is more useful than one padded with an article that does not have the
  * property it claims to demonstrate.
+ *
+ * **Articles whose fetch never completed are dropped before any of this happens.**
+ * The first real capture assigned `hard-paywall` to an article that had timed out,
+ * because a timeout and a paywall look identical from here — both arrive as zero
+ * characters. They are not the same finding at all: one means Instapaper refused to
+ * give up the text, which is the property the fixture exists to demonstrate; the
+ * other means we never asked successfully. Committing the second labelled as the
+ * first is precisely the padding this function is written to avoid, only harder to
+ * notice, because the file would look exactly right.
  */
 export function assignShapes(candidates: readonly Candidate[]): Map<Shape, number> {
   const assigned = new Map<Shape, number>();
   const taken = new Set<number>();
 
+  const usable = candidates.filter((c) => c.outcome !== 'unreachable');
+
   const claim = (shape: Shape, pick: (available: Candidate[]) => Candidate | undefined) => {
-    const available = candidates.filter((c) => !taken.has(c.bookmarkId));
+    const available = usable.filter((c) => !taken.has(c.bookmarkId));
     const chosen = pick(available);
     if (chosen) {
       assigned.set(shape, chosen.bookmarkId);
@@ -171,8 +194,9 @@ export function assignShapes(candidates: readonly Candidate[]): Map<Shape, numbe
     ),
   );
 
-  // Nothing at all came back — the hardest case, and the one that must fail with a
-  // legible tag rather than an exception.
+  // Instapaper answered and the answer had no article in it — the hardest case, and
+  // the one that must fail with a legible tag rather than an exception. Reachable by
+  // construction: unreachable candidates are already out.
   claim('hard-paywall', (a) => a.find((c) => c.measurements.chars === 0));
 
   claim('image-heavy', (a) =>
