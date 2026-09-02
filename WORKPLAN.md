@@ -804,17 +804,38 @@ fetches an article anonymously and authenticated and reports the difference. See
         the User-Agent and IP that earned it, and we send neither — so it works today but is the
         first thing to suspect when that host starts failing, and it will expire far sooner than a
         login cookie. Expectations in `SESSIONS.md` should say so.
-- [ ] The four cleaners as separate pure functions over the fragment (`linkedom`): duplicate title,
+- [x] The four cleaners as separate pure functions over the fragment (`linkedom`): duplicate title,
       missing intro, page furniture, hero image. Furniture removal runs **at render time**, so a new
       rule fixes already-cached articles without a re-sync.
-- [ ] Store beside, never over: `article_text` keeps both sources, a derived accessor picks
-      `extracted ?? instapaper`, and settings gets a "show original" toggle for free.
-- [ ] Gating: run only when `get_text` output trips the heuristic. Retry backoff (one week) **in
+- [x] Store beside, never over: `article_text` keeps both sources, a derived accessor picks
+      `extracted ?? instapaper`, and the reading view gets a "show original" toggle for free. The
+      accessor is not literally `extracted ?? instapaper`, and the difference is the whole of it: a
+      *failed* extraction is recorded as an empty row, so the naive version answers a perfectly good
+      article with a blank screen — precisely for the articles where extraction was needed and did
+      not work. `bestOf` ignores an empty extracted row, and is the one place the question is asked.
+- [x] Gating: run only when `get_text` output trips the heuristic. Retry backoff (one week) **in
       code, not in the query**. Single-flight try-lock around the pass. An explicit "fetch full
-      content" action bypasses every gate.
+      content" action bypasses every gate. The try-lock is taken **before** the gates rather than
+      after them: every gate is an `await` on IndexedDB, and a lock acquired past one is not a lock —
+      two calls a millisecond apart both read, both find nothing in flight, and both fetch. The test
+      for it deadlocked on the first attempt, which is how the ordering was found.
 
 **Done when:** a soft-paywalled article that Instapaper returned a stub for renders in full, and a
 hard-paywalled one fails with a legible tag rather than an exception.
+
+**Status: done.** The stub → full path runs end to end in the browser against the committed
+fixtures, and every failure shape — a refusal, a non-2xx, an empty Readability result — comes back
+as a short tag the reading view prints beside the article rather than as an exception.
+
+The browser run earned its place again, and this time by catching something the unit tests could
+not: **every fixture was rendering the same extracted text.** The reading view asked
+`needsExtraction` on its first render, before the article-text query had resolved; the honest answer
+to "is `undefined` a stub?" is yes, and the gate in `extractArticle` then agreed with it, because
+the IndexedDB row that gate re-reads is written by that very query. Two correct answers composing
+into a publisher fetch for every article opened. The fix is at the call site — the offer and the
+automatic pass both wait for the text to land — and the test pins the primitive's behaviour rather
+than changing it, since "not loaded yet" and "is a stub" are different questions and only the caller
+can tell them apart.
 
 ### 7b — Manual site sessions
 
@@ -826,26 +847,64 @@ hard-paywalled one fails with a legible tag rather than an exception.
       writing it first.
 - [x] Cookies are dropped on a cross-host redirect rather than forwarded — a session must never
       follow a bounce to a third party.
-- [ ] KV binding + `lib/secrets.ts`: AES-GCM under `STASH_ENCRYPTION_KEY`, corrupt-blob recovery
-      deletes and recreates rather than crashing. **Separate namespace from anything Instapaper.**
-      (The probe reads a git-ignored `sessions.txt` in the meantime — same shape, no encryption.)
+- [x] KV binding + `lib/secrets.ts`: AES-GCM under `STASH_ENCRYPTION_KEY`, corrupt-blob recovery
+      deletes and recreates rather than crashing. **Separate namespace from anything Instapaper** —
+      `stash:site-session:v1:` — and the Instapaper token is not in the store at all, so rotating one
+      cannot destroy the other. `lib/kv.ts` is dependency-free: Vercel KV and Upstash both speak
+      Redis-over-HTTP, so the client is thirty lines of `fetch` rather than a package. Recovery is
+      *reported*, not silent: a blob that will not decrypt is deleted and the host is listed under
+      `cleared`, because a session that vanished after a key rotation otherwise looks like a bug in
+      the extractor. (The probe still reads a git-ignored `sessions.txt` — same shape, no encryption.)
 - [x] `scripts/session.ts`: add/list/remove from the CLI, reading the header from stdin so it stays
       out of shell history. The dry run for Phase 7b's settings screen, and it enforces the same
       rule: values go in, only names come out.
-- [ ] `api/sessions`: POST a host + `Cookie:` header value, DELETE one host, GET the host list.
+- [x] `api/sessions`: POST a host + `Cookie:` header value, DELETE one host, GET the host list.
       Only `name=value` pairs are stored; everything else is dropped. **The cookie values are never
-      returned to the client** — GET lists hosts and nothing more.
-- [ ] Settings UI: add a session (host + paste), per-host sign-out, list of signed-in hosts, and a
+      returned to the client** — GET lists hosts and cookie names, and the accessor that can return a
+      value (`loadJar`) is called by `api/extract` and by nothing else. The tests assert it on the
+      serialised bytes rather than on the object, and on what reaches the KV provider as well.
+- [x] Settings UI: add a session (host + paste), per-host sign-out, list of signed-in hosts, and a
       line explaining where to get the value (devtools → Network → copy the `Cookie` request
-      header). Note plainly that this is a desktop-only step that benefits every device.
-- [ ] Attach the jar to the extractor. With an empty store this changes nothing at the wire level —
-      the safe one-line change SanFeedBin's build order relies on.
-- [ ] The expired-session diagnostic: extraction succeeded, output still trips the heuristic, and
+      header). Note plainly that this is a desktop-only step that benefits every device. Each host
+      also shows how long ago its session was pasted, which is the first thing worth knowing when a
+      publisher starts serving stubs again — a `cf_clearance` lasts hours and a login cookie months.
+      A deployment with no store attached renders as a normal state saying so, not as a failure.
+- [x] Attach the jar to the extractor. With an empty store this changes nothing at the wire level —
+      the safe one-line change SanFeedBin's build order relies on, and there is a test asserting
+      exactly that, because the day it stops being true is the day stage one stopped being what was
+      shipped. A store that is missing, misconfigured or unreachable degrades to the anonymous fetch
+      rather than failing the request.
+- [x] The expired-session diagnostic: extraction succeeded, output still trips the heuristic, and
       cookies were sent for that host → surface "session may have expired" with a re-paste action.
-      **Do not auto-clear** — one bad extraction is not proof a session is dead.
+      **Do not auto-clear** — one bad extraction is not proof a session is dead. Only the server knows
+      whether cookies actually went out, so the server decides and the reading view only phrases it.
+      The note is rendered above the article rather than inside the empty state: a stub Instapaper
+      *did* return text for renders as an article, which is precisely the case the diagnostic is for.
 
 **Done when:** pasting a session for a publisher you subscribe to turns one of its stub articles
 into a full one, and clearing that session returns it to a stub.
+
+**Status: built and exercised end to end against a stand-in deployment; not yet verified against a
+live subscription.** The stand-in runs the real `api/sessions` and the real encryption over a
+Map-backed Redis, so what the browser run checks is the deployed path, not a mock of it: pasting a
+header stores exactly one namespaced key, that key holds ciphertext with no cookie name or value in
+it, the screen lists names and an age and never a value, a wrong paste is diagnosed and kept rather
+than swallowed, and signing out removes the blob. The half that needs a real publisher — that a
+pasted session turns *that* publisher's stub into a full article — is the same claim `npm run probe`
+already verified by hand on nieuwsblad.be in 7a, now going through the store instead of
+`sessions.txt`. It wants one confirmation on the deployment.
+
+Two things the browser run changed, both invisible to a unit test:
+
+- **Six controls do not fit a phone bar.** A stub article carries Close, Original, Aa, Full text,
+  Archive and Delete; at 390px, Delete left the screen. Phase 6 bought room by dropping the crumb,
+  and that room is spent. The bar now wraps, which is the answer that stays correct the next time a
+  control is added — squeezing them would not have, and hiding one would have hidden the retry on
+  exactly the article a reader has just pasted a session for.
+- **The retry has to outlive the first attempt.** "Full text" was offered only while no extraction
+  existed, so a stub extraction cached itself into a dead end: the note says the session may have
+  expired, the reader goes and pastes a fresh one, comes back — and there is no button. It is now
+  keyed on what is *on screen* rather than on what is in the cache.
 
 ### 7c — Browser extension (optional, deferred)
 

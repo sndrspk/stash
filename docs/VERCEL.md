@@ -118,9 +118,9 @@ the address bar before the code.
 Set as Vercel environment variables, never in the client bundle. Phase 9's deploy step
 verifies none of them reached `dist/` by grepping the built output for the token.
 
-**Five are required for a working deployment.** A sixth, `STASH_ENCRYPTION_KEY`, is
-documented in `.env.example` and reserved for Phase 7b's publisher cookies; nothing reads it
-yet, and leaving it unset changes nothing today.
+**Five are required for a working deployment.** The rest are for publisher sessions, which
+are optional — extraction runs without them and already handles a good share of soft
+paywalls.
 
 | Variable | Missing means |
 | --- | --- |
@@ -129,6 +129,23 @@ yet, and leaving it unset changes nothing today.
 | `INSTAPAPER_CONSUMER_SECRET` | as above |
 | `INSTAPAPER_OAUTH_TOKEN` | as above |
 | `INSTAPAPER_OAUTH_TOKEN_SECRET` | as above |
+
+### Publisher sessions (optional)
+
+Settings → Publisher sessions needs somewhere to put a cookie header and a key to encrypt it
+with. Both, or neither — a store with no key is refused rather than filled with plaintext
+credentials.
+
+| Variable | Missing means |
+| --- | --- |
+| `KV_REST_API_URL` / `KV_REST_API_TOKEN` | Settings says no store is attached; sessions cannot be saved. Injected automatically when you attach a KV store to the project — `UPSTASH_REDIS_REST_URL` / `_TOKEN` work too, and `STASH_KV_URL` / `STASH_KV_TOKEN` override both. |
+| `STASH_ENCRYPTION_KEY` | With a store attached, saving a session answers 503 rather than writing plaintext. Generate one with `openssl rand -base64 32`. |
+
+Two things follow from where the key lives. **Rotating `STASH_ENCRYPTION_KEY` orphans every
+stored session** — the blobs are cleared on the next read and the settings screen says which
+hosts went, but re-capturing them means walking through every publisher again. And the KV
+store is deliberately separate from the Instapaper token, which is an environment variable
+and is not in the store at all: rotating one must never destroy the other.
 
 **Scope them to Production, not Preview.** Every branch gets a preview URL, and a preview
 carrying live credentials is a second public door to the same Instapaper account. The
