@@ -188,6 +188,23 @@ describe('normalizePrefs', () => {
     expect(normalizePrefs({ lineHeight: 0 }).lineHeight).toBe(LINE_HEIGHT.min);
   });
 
+  it('lets line height go tight enough for a small-x-height face', () => {
+    /*
+     * Pinned to a number rather than to the constant, because the point is the number.
+     * The right leading is a property of the typeface: at a given multiplier Crimson
+     * Pro sets looser than Geist, and a floor of 1.3 left the tightest available
+     * setting still airier than some of these faces want. 1.15 is where ascenders and
+     * descenders on consecutive lines stop having room to collide — a floor, not a
+     * preference, which is why a change to it should have to change this line too.
+     */
+    expect(LINE_HEIGHT.min).toBe(1.15);
+    expect(normalizePrefs({ lineHeight: 1.15 }).lineHeight).toBe(1.15);
+    // And every tick between the floor and the old one is reachable.
+    for (const tick of [1.2, 1.25, 1.3]) {
+      expect(normalizePrefs({ lineHeight: tick }).lineHeight, String(tick)).toBe(tick);
+    }
+  });
+
   it('rejects a size that is not a number', () => {
     for (const bad of [NaN, Infinity, -Infinity, '1.25', null]) {
       expect(normalizePrefs({ fontSize: bad }).fontSize, String(bad)).toBe(DEFAULT_PREFS.fontSize);

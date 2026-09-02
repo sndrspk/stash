@@ -59,7 +59,24 @@ export type ColumnWidthId = keyof typeof COLUMN_WIDTHS;
 
 /** Bounds, in the units the CSS uses. Generous, but not absurd in either direction. */
 export const FONT_SIZE = { min: 0.875, max: 1.75, step: 0.0625, default: 1.125 };
-export const LINE_HEIGHT = { min: 1.3, max: 2.0, step: 0.05, default: 1.6 };
+
+/**
+ * Line height, and why the floor is where it is.
+ *
+ * 1.15 rather than the 1.3 this shipped with, because the right leading is a property
+ * of the *typeface* and not of the reader's taste. The four faces here have visibly
+ * different x-heights — Crimson Pro's is small, Geist's is large — and at a given
+ * multiplier the small-x-height faces set noticeably looser than the large ones. A
+ * floor of 1.3 meant that on some of them the tightest setting available was still
+ * airier than the text wanted, which is a setting that does not go far enough rather
+ * than a matter of preference.
+ *
+ * 1.15 is a floor rather than an arbitrary low number: below roughly 1.1, ascenders
+ * and descenders on consecutive lines begin to collide at these sizes, and a slider
+ * that reaches a broken layout is worse than one that stops short of it. Three ticks
+ * of headroom is what that leaves.
+ */
+export const LINE_HEIGHT = { min: 1.15, max: 2.0, step: 0.05, default: 1.6 };
 
 /**
  * How the article moves.
