@@ -105,8 +105,25 @@ export function Settings() {
       </section>
 
       <section className={styles.section}>
+        <h2 className={styles.heading}>Appearance</h2>
+        <p className={styles.muted}>
+          Typeface, size, line height, column width, paper and the choice between paged and
+          scrolling all live in the reading view, behind <strong>Aa</strong>.
+        </p>
+        <p className={styles.note}>
+          Not an omission from this screen: they are choices you make <em>while</em> reading,
+          against the article you are reading, and every one of them reflows the text as you change
+          it. Two screens away from the thing they alter, they would be settings you tune blind.
+        </p>
+      </section>
+
+      <section className={styles.section}>
         <h2 className={styles.heading}>Still to come</h2>
-        <p className={styles.muted}>Appearance, cache size and clear-cache arrive with Phase 9.</p>
+        <p className={styles.muted}>
+          How much the cache is holding, and a way to clear it, arrive with Phase 9 — along with
+          per-session rate limiting and a clearer prompt when the Instapaper token has been revoked.
+          Offline reading and installing the app are Phase 8.
+        </p>
       </section>
     </div>
   );
