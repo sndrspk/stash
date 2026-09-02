@@ -18,7 +18,7 @@
  *   article back, because replaying it will never work and an article silently
  *   missing from the queue is worse than one that reappears.
  */
-import { ApiError } from './api-error.js';
+import { ApiError, apiErrorFrom, isTokenRejected } from './api-error.js';
 import { clearPending, noteError, readPending, recordAttempt, unmarkPurge } from './store.js';
 
 /**
@@ -47,6 +47,16 @@ export interface FlushResult {
   reverted: number;
   /** True if the gate has lapsed — the caller sends the reader to /unlock. */
   unauthorized: boolean;
+  /**
+   * True if Instapaper refused the stored token.
+   *
+   * Reported separately from `unauthorized` because the fix is different and lives
+   * somewhere else: the passphrase gate is re-entered on the unlock screen, while a
+   * revoked Instapaper token is re-issued by running `npm run connect` on a machine
+   * this app has no access to. Telling a reader to unlock when the token is the
+   * problem sends them round a loop that cannot end.
+   */
+  tokenRejected: boolean;
 }
 
 export interface FlushOptions {
@@ -61,16 +71,7 @@ async function post(action: 'archive' | 'delete', id: number): Promise<void> {
     body: JSON.stringify({ bookmark_id: id }),
   });
   if (response.ok) return;
-
-  let detail: string | undefined;
-  try {
-    const body = (await response.json()) as { detail?: string; error?: string };
-    detail = body.detail ?? body.error;
-  } catch {
-    // A non-JSON body is itself informative — a crashed function returns HTML — but
-    // there is nothing useful to pull out of it.
-  }
-  throw new ApiError(response.status, detail);
+  throw await apiErrorFrom(response);
 }
 
 /**
@@ -125,7 +126,13 @@ const isUnauthorized = (error: unknown): boolean =>
  */
 export async function flushPending(options: FlushOptions = {}): Promise<FlushResult> {
   const { send = post } = options;
-  const result: FlushResult = { sent: 0, deferred: 0, reverted: 0, unauthorized: false };
+  const result: FlushResult = {
+    sent: 0,
+    deferred: 0,
+    reverted: 0,
+    unauthorized: false,
+    tokenRejected: false,
+  };
 
   for (const item of await readPending()) {
     try {
@@ -137,6 +144,22 @@ export async function flushPending(options: FlushOptions = {}): Promise<FlushRes
         // Stop the whole pass: every remaining action would fail the same way, and
         // each one would spend an attempt on it.
         result.unauthorized = true;
+        break;
+      }
+
+      if (isTokenRejected(error)) {
+        /*
+         * Instapaper has refused our credentials. Like a lapsed gate this is a fact
+         * about the deployment and not about any article, so it stops the pass and
+         * costs nothing — but unlike a lapsed gate, nothing the reader does *in the
+         * app* can fix it.
+         *
+         * Counting it would be the worst outcome available: five app starts with a
+         * revoked token and every queued article silently reappears, un-archived,
+         * with the real cause never named. That is precisely the silent failure this
+         * phase exists to remove.
+         */
+        result.tokenRejected = true;
         break;
       }
 

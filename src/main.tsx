@@ -15,6 +15,29 @@ const queryClient = new QueryClient({
       // focus buys nothing and costs a round trip on every tab switch.
       refetchOnWindowFocus: false,
       retry: 1,
+      /*
+       * Every query here reads IndexedDB, so pausing them when the browser reports
+       * no network would be pausing a local database read. `always` is not a
+       * workaround: it is the accurate description of what these queries depend on.
+       */
+      networkMode: 'always',
+    },
+    mutations: {
+      /*
+       * The same, and this one is load-bearing rather than tidy.
+       *
+       * TanStack Query's default `networkMode: 'online'` **pauses** a mutation while
+       * the browser reports offline: `mutationFn` is never called, the mutation sits
+       * `isPending` forever, and nothing resolves. That is the right default for a
+       * mutation that is an HTTP request — and exactly wrong for these, which write
+       * to IndexedDB first and queue the network part deliberately.
+       *
+       * The symptom was archiving on a train doing nothing at all: the button stayed
+       * disabled, the article stayed in the queue, and no error appeared anywhere,
+       * because the promise never settled. The whole Phase 8 queue sat behind a pause
+       * that stopped it from ever being written to.
+       */
+      networkMode: 'always',
     },
   },
 });

@@ -20,6 +20,7 @@
  * a video page, a PDF — and is a fact about the article rather than a fault.
  */
 import { ConfigError, requireEnv, requireSession } from '../src/lib/guard.js';
+import { throttle } from '../src/lib/rate-limit.js';
 import { InstapaperError, callText, credentialsFromEnv } from '../src/lib/instapaper.js';
 
 const json = (body: unknown, status: number) =>
@@ -31,6 +32,9 @@ const json = (body: unknown, status: number) =>
 export async function GET(request: Request): Promise<Response> {
   const refusal = requireSession(request);
   if (refusal) return refusal;
+
+  const limited = throttle(request, 'text');
+  if (limited) return limited;
 
   const raw = new URL(request.url).searchParams.get('bookmark_id');
   const bookmarkId = raw === null ? NaN : Number(raw);

@@ -21,6 +21,7 @@
  * against — it is silent, and it lasts.
  */
 import { requireSession } from '../src/lib/guard.js';
+import { throttle } from '../src/lib/rate-limit.js';
 import {
   BlockedUrlError,
   MAX_REDIRECTS,
@@ -49,6 +50,9 @@ const json = (body: unknown, status: number) =>
 export async function GET(request: Request): Promise<Response> {
   const refusal = requireSession(request);
   if (refusal) return refusal;
+
+  const limited = throttle(request, 'images');
+  if (limited) return limited;
 
   const raw = new URL(request.url).searchParams.get('url');
   if (raw === null || raw.trim() === '') {

@@ -11,10 +11,12 @@ import {
   excerptFor,
   needsExcerptText,
 } from '../lib/front-page';
+import { isTokenRejected } from '../lib/api-error';
 import {
   ApiError,
   useEnsureText,
   useImageCache,
+  useLastFlush,
   usePendingActions,
   useResolveImages,
   useSync,
@@ -42,6 +44,7 @@ export function FrontPage() {
   const sync = useSync();
   const resolve = useResolveImages();
   const { data: pending } = usePendingActions();
+  const { data: lastFlush } = useLastFlush();
   const online = useOnline();
   const ensureText = useEnsureText();
   const [error, setError] = useState<string | null>(null);
@@ -92,6 +95,20 @@ export function FrontPage() {
       .mutateAsync()
       .then(() => setSeed(Date.now()))
       .catch((cause: unknown) => {
+        /*
+         * A revoked token is not "could not sync".
+         *
+         * The distinction is worth the branch: every other sync failure is something
+         * to try again in a minute, and this one will fail identically forever until
+         * somebody runs a command on a machine this app cannot reach. Prefixing that
+         * with "Could not sync" buries the only sentence that leads anywhere.
+         */
+        if (isTokenRejected(cause)) {
+          setError(
+            'Instapaper rejected this deployment\u2019s token — it has probably been revoked. Run `npm run connect` again and replace the two token variables.',
+          );
+          return;
+        }
         setError(`Could not sync: ${cause instanceof Error ? cause.message : 'unknown error'}`);
       });
   }
@@ -147,6 +164,19 @@ export function FrontPage() {
       {error !== null && (
         <p className={styles.error} role="alert">
           {error}
+        </p>
+      )}
+
+      {/*
+        The queue exists but Instapaper will not take it. Shown above the pending
+        count rather than instead of it, because both facts matter: how much is
+        waiting, and why none of it is moving.
+      */}
+      {lastFlush?.tokenRejected === true && (
+        <p className={styles.error} role="alert">
+          Instapaper rejected this deployment&rsquo;s token, so nothing queued can be sent. Nothing
+          has been lost — run <code>npm run connect</code> again, replace the two token variables,
+          and it will go through.
         </p>
       )}
 

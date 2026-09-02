@@ -966,14 +966,54 @@ Two things the run found, both invisible to a unit test and one of them a real b
 
 ## Phase 9 — Settings, hardening, ship
 
-- [ ] Settings: connection status, appearance/theme, cache size, clear cache.
-- [ ] Error surfaces: an expired or revoked Instapaper token prompts to re-run `connect`, rather
-      than failing silently.
-- [ ] Per-session rate limiting on the functions.
-- [ ] Deploy: env vars set as Vercel secrets, none of them exposed to the client bundle. Verify by
-      grepping the built output for the token.
-- [ ] README deploy guide good enough that someone else can fork, run `connect`, deploy and use it.
-- [ ] Final terms-of-use review against the constraint list in the README.
+- [x] Settings: connection status, appearance/theme, cache size, clear cache. Appearance is a
+      pointer rather than a panel — the controls live behind **Aa** in the reading view, because
+      every one of them reflows the article as you move it and two screens away they would be tuned
+      blind. What "clear" *leaves* is the decision worth reading: pending actions, preferences and
+      bookmark rows all survive, because someone freeing space is not asking to un-archive articles
+      or reset their typeface. The byte figure is labelled origin-wide rather than presented as the
+      cache's, since it includes the service worker's precache — which clearing does not remove, and
+      presenting it otherwise would make the button look broken.
+- [x] Error surfaces: an expired or revoked Instapaper token prompts to re-run `connect`, rather
+      than failing silently. Sync already said so; the silent paths were the ones nobody watches —
+      the eager text pass, which would have marked the whole front page as having no text and never
+      mentioned why, and the offline queue, which counted it as an ordinary retry and would have
+      silently un-archived every queued article after five app starts. `isTokenRejected` reads the
+      one thing that distinguishes it: our own 502 wrapping Instapaper's 401.
+- [x] Per-session rate limiting on the functions. Keyed by a hash of the session rather than by IP —
+      the reverse of the unlock endpoint's choice, because a phone changes address walking down a
+      street. `BUDGETS` puts every number in one place so they can be read side by side. These are
+      not security limits (the gate is): they exist so a bug here cannot become a flood at somebody
+      else's expense. The note about a durable KV-backed limiter was resolved rather than carried:
+      the store is optional, so it would be absent on exactly the deployments configured least, and
+      it would put a network round trip in front of every call to defend a single-user app.
+- [x] Deploy: env vars set as Vercel secrets, none of them exposed to the client bundle. Verified by
+      `npm run verify:build`, which greps the built output for each secret's *value* and also
+      refuses any `VITE_`-prefixed secret in source — the second check needs no values and catches
+      the mistake where it is made. It says loudly when the value search was skipped for want of a
+      `.env`, because "nothing found" and "nothing looked for" must not read the same.
+- [x] README deploy guide good enough that someone else can fork, run `connect`, deploy and use it.
+- [x] Final terms-of-use review against the constraint list in the README. Five Instapaper endpoints
+      are called in total and there is no `bookmarks/add`. One constraint needed rewording rather
+      than defending: "an explicit, per-item user click" was written before the offline queue
+      existed, and now says why a queue that replays clicks is still that.
+
+**Status: done, with one caveat carried from Phase 8.** The Lighthouse pass deferred here still
+wants a real deployment — a stand-in server's caching headers are not the ones that ship, so a score
+against it would grade the wrong thing.
+
+**The browser run found a bug Phase 8 shipped**, and it is the sharpest example yet of a suite
+agreeing with itself. TanStack Query's default `networkMode: 'online'` **pauses** a mutation while
+the browser reports offline: `mutationFn` is never called and the promise never settles. So
+archiving on a train did nothing at all — the button stayed disabled, no error appeared, and the
+whole Phase 8 queue sat behind a pause that stopped it from ever being written to.
+
+Phase 8's suite passed because of how it was written, not because the feature worked: it always
+*navigated* after going offline, and a document loaded while already offline never receives an
+`offline` event, so the query client still believed it was online. Going offline while sitting on a
+page — which is what a reader actually does — is what fires the event. Both mutations and queries
+are now `networkMode: 'always'`, which is not a workaround but an accurate description of what they
+depend on: IndexedDB.
 
 ---
 
