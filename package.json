@@ -19,12 +19,14 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "check": "npm run lint && npm run format:check && npm run typecheck && npm run test",
+    "check:deploy": "npm run check && npm run build && npm run verify:build",
     "capture": "tsx --env-file-if-exists=.env scripts/capture.ts",
     "connect": "tsx --env-file-if-exists=.env scripts/connect.ts",
     "fonts": "tsx scripts/fonts.ts",
     "icons": "tsx scripts/icons.ts",
     "probe": "tsx scripts/probe.ts",
-    "session": "tsx scripts/session.ts"
+    "session": "tsx scripts/session.ts",
+    "verify:build": "tsx --env-file-if-exists=.env scripts/verify-build.ts"
   },
   "dependencies": {
     "@mozilla/readability": "^0.5.0",

@@ -9,6 +9,7 @@
  * loop.
  */
 import { ConfigError, requireEnv, requireSession } from './guard.js';
+import { throttle } from './rate-limit.js';
 import { InstapaperError, call, credentialsFromEnv } from './instapaper.js';
 
 const json = (body: unknown, status: number) =>
@@ -36,6 +37,9 @@ export async function handleBookmarkAction(
 ): Promise<Response> {
   const refusal = requireSession(request);
   if (refusal) return refusal;
+
+  const limited = throttle(request, 'action');
+  if (limited) return limited;
 
   let credentials;
   try {

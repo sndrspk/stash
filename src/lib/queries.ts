@@ -8,7 +8,7 @@
  */
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 
-import { ApiError } from './api-error.js';
+import { ApiError, apiErrorFrom } from './api-error.js';
 import type { BookmarkRecord } from './db.js';
 import { extractArticle, type ExtractionResult } from './extraction.js';
 import { resolveImages, type ImagePassResult } from './images.js';
@@ -16,12 +16,14 @@ import { flushOnce, type FlushResult } from './pending.js';
 import type { ReadingPrefs } from './prefs.js';
 import {
   applySync,
+  clearCache,
   markLocally,
   purgeExpired,
   queueAction,
   readAllImages,
   readBestText,
   readBookmark,
+  readCacheUsage,
   readPending,
   readPrefs,
   readTextFor,
@@ -43,25 +45,17 @@ export const keys = {
   prefs: ['prefs'] as const,
   /** Archive and delete actions that have not reached Instapaper yet. */
   pending: ['pending'] as const,
+  /** What the cache is holding, for the settings screen. */
+  usage: ['usage'] as const,
+  /** The last replay's verdict, so the front page can report it. */
+  flush: ['flush'] as const,
 };
 
 export { ApiError };
 
 async function apiFetch(path: string, init?: RequestInit): Promise<unknown> {
   const response = await fetch(path, init);
-
-  if (!response.ok) {
-    let detail: string | undefined;
-    try {
-      const body = (await response.json()) as { detail?: string; error?: string };
-      detail = body.detail ?? body.error;
-    } catch {
-      // A non-JSON error body is itself informative — a crashed function returns
-      // HTML — but there is nothing useful to extract from it.
-    }
-    throw new ApiError(response.status, detail);
-  }
-
+  if (!response.ok) throw await apiErrorFrom(response);
   return response.json();
 }
 
@@ -275,9 +269,42 @@ export function useBookmarkAction(action: 'archive' | 'delete') {
 
       return flushOnce();
     },
+    onSuccess: (result) => client.setQueryData(keys.flush, result),
     onSettled: () => {
       void client.invalidateQueries({ queryKey: keys.pending });
       void client.invalidateQueries({ queryKey: ['bookmarks'] });
+    },
+  });
+}
+
+/**
+ * What the cache is holding.
+ *
+ * `staleTime: 0`, unlike almost everything else here: this is the one query whose
+ * whole job is to be current, and a reader who has just cleared the cache and sees
+ * the old figure will reasonably conclude nothing happened.
+ */
+export function useCacheUsage() {
+  return useQuery({ queryKey: keys.usage, queryFn: readCacheUsage, staleTime: 0 });
+}
+
+/**
+ * Drop the cached text and images.
+ *
+ * Every invalidation below is needed, and for a different reason: the article queries
+ * are now wrong, the image map is now empty, and the usage figure is the thing the
+ * reader is watching to know it worked.
+ */
+export function useClearCache() {
+  const client = useQueryClient();
+
+  return useMutation({
+    mutationFn: clearCache,
+    onSuccess: async () => {
+      await client.invalidateQueries({ queryKey: ['article'] });
+      await client.invalidateQueries({ queryKey: ['text'] });
+      await client.invalidateQueries({ queryKey: keys.images });
+      await client.invalidateQueries({ queryKey: keys.usage });
     },
   });
 }
@@ -304,7 +331,25 @@ export async function runPendingFlush(client: QueryClient): Promise<FlushResult>
     await client.invalidateQueries({ queryKey: ['bookmarks'] });
   }
   await client.invalidateQueries({ queryKey: keys.pending });
+  /*
+   * Written into the cache rather than returned to nobody. The flush's most important
+   * outcome — Instapaper refused the token — happens on app start, where there is no
+   * component waiting on the promise, and it is the one thing the reader has to be
+   * told rather than left to infer from articles quietly reappearing.
+   */
+  client.setQueryData(keys.flush, result);
   return result;
+}
+
+/** The last replay's verdict. Undefined until one has run. */
+export function useLastFlush() {
+  return useQuery<FlushResult | undefined>({
+    queryKey: keys.flush,
+    // Never fetches: this is a slot that `runPendingFlush` and the action mutation
+    // write into, and a query is simply the subscription mechanism.
+    queryFn: () => undefined,
+    staleTime: Infinity,
+  });
 }
 
 /**

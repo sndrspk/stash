@@ -306,6 +306,70 @@ describe('a permanent failure', () => {
   });
 });
 
+describe('a rejected Instapaper token', () => {
+  it('stops the pass without spending an attempt or reverting anything', async () => {
+    /*
+     * The silent failure this replaces: counted as an ordinary retry, five app starts
+     * with a revoked token would un-archive every queued article one by one, and the
+     * cause — a token that needs re-issuing from a machine the app cannot reach —
+     * would never be named anywhere.
+     */
+    await seed(1, 2);
+    await markLocally(1, 'archived', NOW);
+    await queueAction(1, 'archive', NOW);
+    await queueAction(2, 'archive', NOW + 1);
+
+    const rejected = new ApiError(
+      502,
+      'Instapaper rejected the credentials (401).',
+      'instapaper',
+      401,
+    );
+    const { asked, send } = recording(() => Promise.reject(rejected));
+    const result = await flushPending({ send });
+
+    expect(result.tokenRejected).toBe(true);
+    expect(result.unauthorized).toBe(false);
+    // Stopped at the first: the second would fail identically.
+    expect(asked).toEqual(['archive:1']);
+    expect(await readPending()).toHaveLength(2);
+    expect((await readPendingFor(1))?.attempts).toBe(0);
+    // And the reader's decision stands, waiting for a working token.
+    expect((await readBookmark(1))?.state).toBe('archived');
+  });
+
+  it('survives any number of passes with the token still revoked', async () => {
+    await seed(1);
+    await markLocally(1, 'archived', NOW);
+    await queueAction(1, 'archive', NOW);
+
+    const rejected = new ApiError(502, 'rejected', 'instapaper', 401);
+    for (let i = 0; i < MAX_ATTEMPTS * 3; i += 1) {
+      resetFlushLock();
+      await flushPending({ send: () => Promise.reject(rejected) });
+    }
+
+    expect(await readPending()).toHaveLength(1);
+    expect((await readBookmark(1))?.state).toBe('archived');
+  });
+
+  it('is not confused with an ordinary Instapaper failure', async () => {
+    // A 502 wrapping anything other than a 401 is a bad afternoon at Instapaper, not
+    // a fact about our credentials, and it should retry like any other.
+    await seed(1);
+    await queueAction(1, 'archive', NOW);
+
+    const result = await flushPending({
+      send: () =>
+        Promise.reject(new ApiError(502, 'Instapaper returned HTTP 503', 'instapaper', 503)),
+    });
+
+    expect(result.tokenRejected).toBe(false);
+    expect(result.deferred).toBe(1);
+    expect((await readPendingFor(1))?.attempts).toBe(1);
+  });
+});
+
 describe('an expired session', () => {
   it('stops the pass without spending an attempt on anything', async () => {
     /*

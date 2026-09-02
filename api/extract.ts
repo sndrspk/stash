@@ -22,6 +22,7 @@ import { cookieHeaderFor } from '../src/lib/cookies.js';
 import { BlockedUrlError, assertFetchable } from '../src/lib/fetch-guard.js';
 import { extract } from '../src/lib/extract.js';
 import { requireSession } from '../src/lib/guard.js';
+import { throttle } from '../src/lib/rate-limit.js';
 import { loadJar, openSessionContext } from '../src/lib/site-sessions.js';
 import { isTruncated } from '../src/lib/truncation.js';
 
@@ -37,6 +38,9 @@ const json = (body: unknown, status: number) =>
 export async function GET(request: Request): Promise<Response> {
   const refusal = requireSession(request);
   if (refusal) return refusal;
+
+  const limited = throttle(request, 'extract');
+  if (limited) return limited;
 
   const params = new URL(request.url).searchParams;
   const raw = params.get('url');

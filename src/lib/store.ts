@@ -423,3 +423,87 @@ async function bumpPending(id: number, error: string, count: boolean): Promise<n
   await tx.done;
   return attempts;
 }
+
+/* --- what the cache is holding --- */
+
+export interface CacheUsage {
+  /** Bookmarks in any state, including archived ones kept so they are recognised. */
+  bookmarks: number;
+  /** Cached article bodies, counting both sources separately. */
+  texts: number;
+  images: number;
+  /** Archive and delete actions that have not reached Instapaper yet. */
+  pending: number;
+  /**
+   * Bytes this origin is using, from `navigator.storage.estimate()`, or null.
+   *
+   * Null rather than zero when the browser will not say, which is a real case:
+   * the API is absent in some browsers and throws in others. Null renders as
+   * "unknown" and zero would render as "empty", and only one of those is true.
+   *
+   * It is also an **origin-wide** figure, not this database's: it includes the
+   * service worker's precache and the article images it holds. That is arguably the
+   * more useful number — it is what the browser counts against its quota, and what
+   * a reader means by "how much space is this taking" — but it is not the size of
+   * the rows counted above, and the screen says so rather than implying otherwise.
+   */
+  bytes: number | null;
+}
+
+export async function readCacheUsage(): Promise<CacheUsage> {
+  const db = await getDb();
+  const tx = db.transaction(['bookmarks', 'article_text', 'image_cache', 'pending_actions']);
+
+  const [bookmarks, texts, images, pending] = await Promise.all([
+    tx.objectStore('bookmarks').count(),
+    tx.objectStore('article_text').count(),
+    tx.objectStore('image_cache').count(),
+    tx.objectStore('pending_actions').count(),
+  ]);
+  await tx.done;
+
+  let bytes: number | null = null;
+  try {
+    if (navigator.storage?.estimate) bytes = (await navigator.storage.estimate()).usage ?? null;
+  } catch {
+    // Some browsers throw rather than answer. Unknown is the honest result.
+  }
+
+  return { bookmarks, texts, images, pending, bytes };
+}
+
+export interface ClearResult {
+  texts: number;
+  images: number;
+}
+
+/**
+ * Drop the cached article text and images.
+ *
+ * Deliberately **not** a wipe of the database, and the three things it leaves behind
+ * are the point:
+ *
+ * - **Pending actions stay.** They are not cache — they are decisions the reader made
+ *   that Instapaper has not heard yet, and clearing them would silently un-archive
+ *   articles at the one moment someone is trying to free space rather than change
+ *   their queue.
+ * - **Preferences stay.** Nobody clearing a cache is asking to have their typeface
+ *   reset.
+ * - **Bookmark rows stay.** They are tiny, they come back on the next sync anyway,
+ *   and keeping them is what lets an already-archived article be recognised rather
+ *   than re-fetched if it reappears.
+ *
+ * What goes is what is expensive and re-fetchable, which is the definition of a cache.
+ */
+export async function clearCache(): Promise<ClearResult> {
+  const db = await getDb();
+  const tx = db.transaction(['article_text', 'image_cache'], 'readwrite');
+
+  const texts = await tx.objectStore('article_text').count();
+  const images = await tx.objectStore('image_cache').count();
+  await tx.objectStore('article_text').clear();
+  await tx.objectStore('image_cache').clear();
+  await tx.done;
+
+  return { texts, images };
+}

@@ -158,14 +158,93 @@ consumer key. It is granted per application, separately from Full API access, an
 else. It is almost certainly not the request signing — that is verified against RFC 5849's own
 worked example by `npm test`.
 
+## Deploying your own
+
+About fifteen minutes, most of it waiting for Instapaper to issue API credentials. The result is a
+private URL only you can get past.
+
+### 1. Get the credentials
+
+Ask Instapaper for **Full API** access with **xAuth** enabled. Then, on your own machine:
+
+```sh
+git clone https://github.com/sndrspk/stash && cd stash
+npm install
+cp .env.example .env          # paste the consumer key and secret in
+npm run connect               # prompts for your Instapaper login, prints a token
+```
+
+Paste the two token values `connect` prints into `.env`. Your password is never stored anywhere and
+never reaches the deployed app.
+
+### 2. Choose a passphrase
+
+The deployment URL is public and the account behind it can be deleted from, so a single passphrase
+gates every function. **Generate it; do not choose it.**
+
+```sh
+openssl rand -base64 24       # STASH_PASSPHRASE
+```
+
+### 3. Deploy
+
+```sh
+npm i -g vercel
+vercel                        # links the project and deploys a preview
+```
+
+Then set the environment variables on the project — five required, listed in
+[`docs/VERCEL.md`](docs/VERCEL.md) with what each one's absence looks like — and **scope them to
+Production, not Preview**. Every branch gets a preview URL, and a preview carrying live credentials
+is a second public door to the same Instapaper account.
+
+Vercel attaches the environment at deploy time, so redeploy after adding them: `vercel --prod`.
+
+Open the URL, enter your passphrase, press Refresh. If something is wrong, `/settings` names which
+variable rather than making you guess.
+
+### 4. Optional: publisher sessions
+
+Only if you subscribe to publishers whose articles arrive as stubs. Attach a KV store to the project
+and set `STASH_ENCRYPTION_KEY` (`openssl rand -base64 32`), then follow
+[`SESSIONS.md`](SESSIONS.md). Without it, extraction still runs anonymously, which already handles a
+good share of soft paywalls.
+
+### Before you deploy
+
+```sh
+npm run check:deploy
+```
+
+Lint, format, typecheck, tests, a production build, and a check that **no secret's value appears in
+`dist/`**. That last one matters more than it sounds: anything named `VITE_*` is inlined into the
+client bundle by design, and `import.meta.env` looks close enough to `process.env` that reaching for
+the wrong one is a natural mistake — and a silent one, because the app works perfectly afterwards
+with the token sitting in a file anyone can read. Run it with your `.env` present, or the value
+search has nothing to search for and says so.
+
+### What it costs
+
+Vercel's Hobby tier is free and ample for one reader; note it is **non-commercial use only**, which
+is fine for this. A KV store's free tier is vastly larger than a few dozen cookie strings need.
+There is no database, no scheduled job, and nothing that runs when you are not reading.
+
 ## Constraints we hold ourselves to
 
-These come from Instapaper's API terms and are treated as non-negotiable throughout the codebase:
+These come from Instapaper's API terms and are treated as non-negotiable throughout the codebase.
+Re-read against the code at the end of Phase 9; the five Instapaper endpoints this app has ever
+called are `account/verify_credentials`, `bookmarks/list`, `bookmarks/get_text`, `bookmarks/archive`
+and `bookmarks/delete`.
 
 - The account password is used for exactly one token-exchange request, then discarded. Only the
   resulting OAuth token/secret is persisted.
 - No bookmark is ever archived or deleted except by an explicit, per-item user click. No bulk
-  actions, no automated cleanup.
+  actions, no automated cleanup. **The offline queue does not weaken this**, and it was re-checked
+  against it: the queue holds one intent per article, keyed by bookmark id, so it can only ever
+  replay a click that happened — never originate one, never coalesce two, never fan one out. It
+  drains serially, one call per article, which is the same shape a reader clicking would produce.
+  There is no batch endpoint anywhere in this codebase, and `parseBookmarkId` refuses an array
+  where a number belongs rather than looping over it.
 - Never scrape instapaper.com. Image resolution and text re-extraction only ever fetch a
   bookmark's own original source URL.
 - The app never creates bookmarks.

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+import { CacheSettings } from '../components/CacheSettings';
 import { SiteSessions } from '../components/SiteSessions';
 import { TO_UNLOCK, classifyStatusResponse, type Status } from '../lib/status-view';
 import styles from './Settings.module.css';
@@ -118,12 +119,8 @@ export function Settings() {
       </section>
 
       <section className={styles.section}>
-        <h2 className={styles.heading}>Still to come</h2>
-        <p className={styles.muted}>
-          How much the cache is holding, and a way to clear it, arrive with Phase 9 — along with
-          per-session rate limiting and a clearer prompt when the Instapaper token has been revoked.
-          Offline reading and installing the app are Phase 8.
-        </p>
+        <h2 className={styles.heading}>Storage</h2>
+        <CacheSettings />
       </section>
     </div>
   );

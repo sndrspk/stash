@@ -6,6 +6,7 @@
  * the local cache, where the previous state actually lives.
  */
 import { ConfigError, requireEnv, requireSession } from '../src/lib/guard.js';
+import { throttle } from '../src/lib/rate-limit.js';
 import { InstapaperError, call, credentialsFromEnv } from '../src/lib/instapaper.js';
 import { parseBookmarkList } from '../src/lib/sync.js';
 
@@ -25,6 +26,9 @@ const json = (body: unknown, status: number) =>
 export async function GET(request: Request): Promise<Response> {
   const refusal = requireSession(request);
   if (refusal) return refusal;
+
+  const limited = throttle(request, 'sync');
+  if (limited) return limited;
 
   let credentials;
   try {

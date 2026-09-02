@@ -11,7 +11,7 @@
  * never asked again, a failure is recorded rather than dropped, and passes queue
  * instead of racing.
  */
-import { ApiError } from './api-error.js';
+import { ApiError, apiErrorFrom, isTokenRejected } from './api-error.js';
 import type { BookmarkRecord } from './db.js';
 import { readText, writeText } from './store.js';
 
@@ -39,14 +39,24 @@ export interface EnsureTextOptions {
 /**
  * Asks our own function for one article's text.
  *
- * A 401 throws rather than being recorded: the gate has lapsed, which is not a fact
- * about this article, and caching it as "no text" would outlast the cookie by days.
+ * Two failures throw rather than being recorded, and for the same reason: neither is
+ * a fact about *this article*, and caching either as "no text" would outlast its
+ * cause by days.
+ *
+ * - **401** — the gate has lapsed.
+ * - **A rejected Instapaper token** — every article will fail identically until the
+ *   operator runs `connect` again. Recorded per article, this pass would quietly mark
+ *   the whole front page as having no text and never mention why.
  */
 async function requestText(bookmarkId: number): Promise<TextOutcome> {
   const response = await fetch(`/api/text?bookmark_id=${bookmarkId}`);
 
   if (response.status === 401) throw new ApiError(401, 'unauthorized');
-  if (!response.ok) return { kind: 'failed' };
+  if (!response.ok) {
+    const error = await apiErrorFrom(response);
+    if (isTokenRejected(error)) throw error;
+    return { kind: 'failed' };
+  }
 
   const body = (await response.json()) as { html?: string | null };
   const html = typeof body.html === 'string' ? body.html.trim() : '';
