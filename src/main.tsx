@@ -6,7 +6,7 @@ import './styles/fonts.css';
 import './styles/theme.css';
 import { App } from './App';
 import { requestPersistence } from './lib/db';
-import { runStartupPurge } from './lib/queries';
+import { runPendingFlush, runStartupPurge } from './lib/queries';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -44,3 +44,26 @@ void runStartupPurge(queryClient).catch((error: unknown) => {
 void requestPersistence().catch(() => {
   /* Best-effort by design; see requestPersistence. */
 });
+
+/*
+ * Drain the offline queue: once now, and again whenever the network comes back.
+ *
+ * The listener is deliberately never removed. It is bound to the page rather than to
+ * a component, because an archive queued in the reading view has to be sent whether
+ * or not the reader is still on that screen — and because `online` is exactly the
+ * moment worth acting on and it does not wait for a render.
+ *
+ * `flushOnce` inside makes the two triggers safe together: a phone rejoining a
+ * network fires `online` while the app is still starting, and both would otherwise
+ * read the same rows and send the same archive twice.
+ */
+const flush = () => {
+  void runPendingFlush(queryClient).catch((error: unknown) => {
+    // Nothing is lost by a failed pass — the intents are on disk and the next trigger
+    // will try again. Logged rather than surfaced for exactly that reason.
+    console.warn('Could not send queued actions; they are still queued.', error);
+  });
+};
+
+flush();
+window.addEventListener('online', flush);

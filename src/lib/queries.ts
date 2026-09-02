@@ -12,21 +12,22 @@ import { ApiError } from './api-error.js';
 import type { BookmarkRecord } from './db.js';
 import { extractArticle, type ExtractionResult } from './extraction.js';
 import { resolveImages, type ImagePassResult } from './images.js';
+import { flushOnce, type FlushResult } from './pending.js';
 import type { ReadingPrefs } from './prefs.js';
 import {
   applySync,
   markLocally,
   purgeExpired,
+  queueAction,
   readAllImages,
   readBestText,
   readBookmark,
+  readPending,
   readPrefs,
   readTextFor,
   readTextSources,
   readUnread,
-  restore,
   writePrefs,
-  type ArchiveSnapshot,
 } from './store.js';
 import type { RemoteBookmark } from './sync.js';
 import { ensureText, type TextPassResult } from './text.js';
@@ -40,6 +41,8 @@ export const keys = {
   /** Both sources for one article, so "show original" needs no second fetch. */
   articleSources: (id: number) => ['article', id, 'sources'] as const,
   prefs: ['prefs'] as const,
+  /** Archive and delete actions that have not reached Instapaper yet. */
+  pending: ['pending'] as const,
 };
 
 export { ApiError };
@@ -243,41 +246,65 @@ export function useEnsureText() {
 }
 
 /**
- * Archive or delete, applied locally first and rolled back exactly on failure.
+ * Archive or delete: marked locally, queued, and sent.
  *
- * The order matters. The local mark happens before the request so the article
- * leaves the queue immediately; the snapshot it returns is what makes the rollback
- * exact rather than approximate. Anything other than a 2xx puts every touched row
- * back — including an ambiguous timeout, which resolves toward showing the article
- * again rather than hiding one that may still be in the account.
+ * The order matters and has not changed — the local mark happens first, so the
+ * article leaves the queue the moment it is clicked rather than when the network
+ * agrees. What changed is what happens when the network does not agree.
+ *
+ * It used to roll back on any non-2xx, which is right for a request that is wrong and
+ * exactly wrong for one that never left the building. A reader on a train archiving
+ * five articles would watch all five come back. So the intent is written to disk
+ * first and the send is a flush of that queue: a transient failure keeps the intent
+ * and replays it on reconnect, and only a genuinely permanent one puts the article
+ * back. `flushPending` owns that distinction; this owns the ordering.
+ *
+ * The mutation still resolves rather than throwing when the send fails, because a
+ * queued action is not an error the reader needs to see as one — the pending count
+ * on the front page is how it is reported.
  */
 export function useBookmarkAction(action: 'archive' | 'delete') {
   const client = useQueryClient();
 
-  return useMutation({
+  return useMutation<FlushResult, Error, number>({
     mutationFn: async (id: number) => {
-      const snapshot: ArchiveSnapshot | null = await markLocally(
-        id,
-        action === 'archive' ? 'archived' : 'deleted',
-      );
+      await markLocally(id, action === 'archive' ? 'archived' : 'deleted');
+      await queueAction(id, action);
       // Show the change before the network call, not after it.
       await client.invalidateQueries({ queryKey: ['bookmarks'] });
 
-      try {
-        await apiFetch(`/api/${action}`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ bookmark_id: id }),
-        });
-      } catch (error) {
-        if (snapshot) await restore(snapshot);
-        await client.invalidateQueries({ queryKey: ['bookmarks'] });
-        throw error;
-      }
-
-      return id;
+      return flushOnce();
+    },
+    onSettled: () => {
+      void client.invalidateQueries({ queryKey: keys.pending });
+      void client.invalidateQueries({ queryKey: ['bookmarks'] });
     },
   });
+}
+
+/** What is waiting to reach Instapaper, for the front page to report. */
+export function usePendingActions() {
+  return useQuery({
+    queryKey: keys.pending,
+    queryFn: readPending,
+    staleTime: Infinity,
+  });
+}
+
+/**
+ * Drain the queue.
+ *
+ * Exposed as a plain function rather than a hook because its two most important
+ * callers are not React: the `online` event, and app start. `flushOnce` is what makes
+ * three near-simultaneous triggers into one pass.
+ */
+export async function runPendingFlush(client: QueryClient): Promise<FlushResult> {
+  const result = await flushOnce();
+  if (result.sent > 0 || result.reverted > 0) {
+    await client.invalidateQueries({ queryKey: ['bookmarks'] });
+  }
+  await client.invalidateQueries({ queryKey: keys.pending });
+  return result;
 }
 
 /**

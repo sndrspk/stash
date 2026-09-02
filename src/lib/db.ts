@@ -17,8 +17,8 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 
 export const DB_NAME = 'stash';
-/** v2 added `settings`, for the reading preferences. */
-export const DB_VERSION = 2;
+/** v2 added `settings`; v3 added `pending_actions`, for archive and delete offline. */
+export const DB_VERSION = 3;
 
 /** Seven days, in milliseconds. The grace period before a purge actually happens. */
 export const PURGE_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
@@ -102,6 +102,29 @@ export interface ImageCacheRecord {
   purge_after: number | null;
 }
 
+/**
+ * An archive or delete that has not reached Instapaper yet.
+ *
+ * The queue exists because the local mark and the remote call are two things, and a
+ * phone on a train does the first and not the second. Without it the only options are
+ * both bad: refuse the action while offline, or accept it and lose it.
+ *
+ * **Keyed by `bookmark_id`, so one article can have exactly one pending intent.** Not
+ * an append-only log: archiving and then deleting the same article while offline is
+ * one decision changing its mind, and replaying both would send Instapaper an archive
+ * for something the reader wanted gone. The last intent wins, which is also what the
+ * local state already shows.
+ */
+export interface PendingActionRecord {
+  bookmark_id: number;
+  action: 'archive' | 'delete';
+  queued_at: number;
+  /** How many times a replay has been tried and failed. */
+  attempts: number;
+  /** The last failure, for the reader to see. Short, and never a stack trace. */
+  last_error: string | null;
+}
+
 interface StashDB extends DBSchema {
   bookmarks: {
     key: number;
@@ -139,6 +162,14 @@ interface StashDB extends DBSchema {
   settings: {
     key: string;
     value: unknown;
+  };
+  pending_actions: {
+    key: number;
+    value: PendingActionRecord;
+    indexes: {
+      /** Replayed oldest first, so the queue drains in the order it was filled. */
+      by_queued_at: number;
+    };
   };
 }
 
@@ -187,6 +218,11 @@ export function getDb(): Promise<StashDatabase> {
       if (oldVersion < 2) {
         // No index and no keyPath: the key is the setting's name, passed in.
         db.createObjectStore('settings');
+      }
+
+      if (oldVersion < 3) {
+        const pending = db.createObjectStore('pending_actions', { keyPath: 'bookmark_id' });
+        pending.createIndex('by_queued_at', 'queued_at');
       }
     },
     blocking() {

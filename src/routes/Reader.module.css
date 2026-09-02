@@ -444,3 +444,9 @@
 .tapForward {
   right: 0;
 }
+
+/* A second line inside a notice: the explanation under the statement. */
+.muted {
+  font-size: var(--text-sm);
+  color: var(--ink-faint);
+}

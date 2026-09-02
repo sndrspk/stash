@@ -17,6 +17,7 @@ import {
   type BookmarkRecord,
   type BookmarkState,
   type ImageCacheRecord,
+  type PendingActionRecord,
   type TextSource,
 } from './db.js';
 import { reconcile, type RemoteBookmark } from './sync.js';
@@ -169,7 +170,19 @@ export async function purgeExpired(now = Date.now()): Promise<PurgeResult> {
   return { texts, images };
 }
 
-/** Clears the purge mark, e.g. when an archive is undone before the deadline. */
+/**
+ * Undoes a local mark: back to `unread`, purge cancelled on the text and the image.
+ *
+ * Written in Phase 3 against a caller that did not exist yet; the offline queue is
+ * that caller. It is the counterpart to `restore` for the case where there is no
+ * snapshot to restore from — a queued action can be replayed by a page load days
+ * later, so the undo has to be reconstructible from what is on disk.
+ *
+ * Approximate where `restore` is exact: it returns the article to `unread` rather
+ * than to whatever it was. Nothing can reach it in another state — only an unread
+ * article can be archived or deleted from the UI, and one that has genuinely moved on
+ * comes back as `gone` from the next sync rather than from here.
+ */
 export async function unmarkPurge(id: number): Promise<void> {
   const db = await getDb();
   const tx = db.transaction(['bookmarks', 'article_text', 'image_cache'], 'readwrite');
@@ -334,4 +347,79 @@ export async function needsImageLookup(url: string, now = Date.now()): Promise<b
   if (!existing) return true;
   if (existing.status !== 'error') return false;
   return now - existing.resolved_at >= IMAGE_RETRY_MS;
+}
+
+/* --- the pending-action queue --- */
+
+/**
+ * Record an intent, replacing any earlier one for the same article.
+ *
+ * `put` rather than `add`, because the key is the bookmark: a reader who archives and
+ * then deletes the same article offline has changed their mind, not queued two jobs.
+ * The attempt count resets with the new intent, which is right — a fresh decision has
+ * not failed yet.
+ */
+export async function queueAction(
+  id: number,
+  action: PendingActionRecord['action'],
+  now = Date.now(),
+): Promise<void> {
+  await (
+    await getDb()
+  ).put('pending_actions', {
+    bookmark_id: id,
+    action,
+    queued_at: now,
+    attempts: 0,
+    last_error: null,
+  });
+}
+
+/** Everything waiting, oldest first — the order it will be replayed in. */
+export async function readPending(): Promise<PendingActionRecord[]> {
+  return (await getDb()).getAllFromIndex('pending_actions', 'by_queued_at');
+}
+
+export async function readPendingFor(id: number): Promise<PendingActionRecord | undefined> {
+  return (await getDb()).get('pending_actions', id);
+}
+
+export async function clearPending(id: number): Promise<void> {
+  await (await getDb()).delete('pending_actions', id);
+}
+
+/**
+ * Note that a replay failed, without losing the intent.
+ *
+ * Read-modify-write inside one transaction: two flushes racing on the same row would
+ * otherwise both read `attempts: 2` and both write `3`, and the cap that exists to
+ * stop an unreplayable action retrying forever would never be reached.
+ */
+export async function recordAttempt(id: number, error: string): Promise<number> {
+  return bumpPending(id, error, true);
+}
+
+/**
+ * Record why a replay failed **without** counting it as an attempt.
+ *
+ * For the failure that never reached a server. The reader still wants to see the
+ * reason on the settings screen or in a log; what they must not get is an article
+ * reverted because their train went through a tunnel five times.
+ */
+export async function noteError(id: number, error: string): Promise<void> {
+  await bumpPending(id, error, false);
+}
+
+async function bumpPending(id: number, error: string, count: boolean): Promise<number> {
+  const db = await getDb();
+  const tx = db.transaction('pending_actions', 'readwrite');
+  const existing = await tx.store.get(id);
+  if (!existing) {
+    await tx.done;
+    return 0;
+  }
+  const attempts = count ? existing.attempts + 1 : existing.attempts;
+  await tx.store.put({ ...existing, attempts, last_error: error });
+  await tx.done;
+  return attempts;
 }

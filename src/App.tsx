@@ -1,16 +1,24 @@
 import { RouterProvider } from 'react-router-dom';
 
+import { UpdatePrompt } from './components/UpdatePrompt';
 import { usePaperTheme } from './hooks/usePaperTheme';
 import { router } from './router';
 
 /**
- * The router, plus the one thing that has to sit above it.
+ * The router, plus the two things that have to sit above it.
  *
  * The reader's chosen paper is applied to `<html>`, so it has to be set by something
- * that renders on every screen — including the gate, which is outside the app
- * layout. This component exists for that and nothing else.
+ * that renders on every screen — including the gate, which is outside the app layout.
+ * The update prompt is here for the same reason and one more: it registers the
+ * service worker, which must happen once for the whole app rather than once per
+ * route.
  */
 export function App() {
   usePaperTheme();
-  return <RouterProvider router={router} />;
+  return (
+    <>
+      <RouterProvider router={router} />
+      <UpdatePrompt />
+    </>
+  );
 }

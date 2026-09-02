@@ -355,3 +355,19 @@
     opacity: 0.5;
   }
 }
+
+/*
+ * The queued-actions line.
+ *
+ * Deliberately not `.error`: an archive waiting for a network is the app working as
+ * designed, and a red rule beside it would read as something broken.
+ */
+.pending {
+  margin-bottom: var(--space-6);
+  padding: var(--space-2) var(--space-4);
+  border-left: 3px solid var(--rule);
+  background: var(--paper-sunken);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  color: var(--ink-muted);
+}

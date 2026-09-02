@@ -915,15 +915,52 @@ own store review. Build only if the paste step is what stops you using Stash.
 
 ## Phase 8 — Offline and PWA polish
 
-- [ ] Service worker: precache the app shell; runtime-cache article images.
-- [ ] Offline reads work from the IndexedDB cache with no network.
-- [ ] Offline archive/delete: queue the intent, replay on reconnect, show clearly that the action is
-      pending. (Still one explicit click per item — queuing is not batching.)
-- [ ] Manifest, icons, splash screens, `theme-color`, iOS install metadata.
-- [ ] Lighthouse PWA + performance pass.
+- [x] Service worker: precache the app shell; runtime-cache article images. Registration is the
+      other half of Phase 1's `registerType: 'prompt'`, which without a caller for
+      `updateServiceWorker` installs a new build, waits, and never activates — an app permanently
+      one version behind with nothing saying so. The prompt is a dismissible line at the foot of the
+      screen, not a modal: nothing about a new build of a reading app is urgent, and it must not
+      cover the article. Images are `CacheFirst` and matched on `request.destination` rather than on
+      a host list, because the articles come from anywhere; `cacheableResponse: [0, 200]` is what
+      keeps opaque cross-origin responses — which is most article images — from being discarded.
+- [x] Offline reads work from the IndexedDB cache with no network.
+- [x] Offline archive/delete: queue the intent, replay on reconnect, show clearly that the action is
+      pending. (Still one explicit click per item — queuing is not batching, and the flush is
+      sequential for the same reason there is no batch endpoint.) DB v3 adds `pending_actions`,
+      keyed by `bookmark_id` so one article holds exactly one intent: archiving and then deleting
+      the same article offline is a reader changing their mind, and replaying both would send
+      Instapaper an archive for something they wanted gone.
+- [x] Manifest, icons, splash screens, `theme-color`, iOS install metadata. Done in Phase 1 and
+      verified here rather than rebuilt.
+- [ ] Lighthouse PWA + performance pass. **Not done** — deferred to Phase 9's deploy step, where it
+      can run against the real deployment rather than a stand-in server whose caching headers are
+      not the ones that will ship.
 
 **Done when:** the app installs on iOS and Android, opens offline, and shows a previously-read
 article with no network.
+
+**Status: offline verified end to end in Chromium; installing on real devices is not.** The browser
+run does the whole journey with `setOffline(true)` — cold start with no network, a previously-read
+article rendering from the cache, two archives queued, the intents surviving a reload, and the queue
+draining by itself when the network returns. What it cannot tell you is whether the app installs on
+an actual iPhone, which is the half of the "done when" that wants a phone.
+
+Two things the run found, both invisible to a unit test and one of them a real bug in the design:
+
+- **The retry budget was being spent on being offline.** `MAX_ATTEMPTS` exists to stop an action
+  that fails consistently for a reason the code cannot classify. Counting *every* failure against
+  it meant a flush — which fires on app start, on `online`, and on each queued action — burned five
+  attempts inside a single offline session. A reader archiving a handful of articles on a train
+  would have watched them reappear, reverted for exceeding a budget while there was no network to
+  answer. Failures are now three kinds rather than two: `unreachable` (no response at all — keep the
+  intent, record why, **do not count it**), `retry` (the server answered and might answer
+  differently), and `permanent`. Silence is not evidence about an action. The comment in the first
+  version of the test asserted the opposite, confidently, which is the part worth remembering.
+- **Offline, an un-downloaded article blamed the publisher.** It rendered "Instapaper has no text
+  for this one — a paywall, a video page, or a PDF" and offered a fetch that could not work: a
+  confident diagnosis of the wrong thing about an article that may be perfectly ordinary and one
+  connection away. It also arrives as `isError` rather than as empty text, because the query throws
+  with no network — so the first fix landed in a branch the case never reaches.
 
 ---
 
