@@ -1,0 +1,65 @@
+/*
+ * Pinned to the foot of the screen rather than the top.
+ *
+ * The reading view's own controls are along the top edge, and a banner that pushes
+ * them down would move Archive and Delete out from under a thumb that already knows
+ * where they are. The bottom is also where the home indicator is, hence the inset.
+ */
+.bar {
+  position: fixed;
+  z-index: 50;
+  left: var(--space-4);
+  right: var(--space-4);
+  bottom: calc(var(--space-4) + env(safe-area-inset-bottom));
+
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  max-width: 32rem;
+  margin: 0 auto;
+  padding: var(--space-3) var(--space-4);
+
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  /* Sunken rather than paper: it has to read as sitting on top of the page, and on
+     the white paper an untinted panel would have nothing but its border. */
+  background: var(--paper-sunken);
+  box-shadow: 0 2px 12px rgb(0 0 0 / 12%);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
+
+.text {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--ink);
+}
+
+.primary,
+.dismiss {
+  flex: 0 0 auto;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+  /* A comfortable tap target whatever the label costs in width. */
+  min-height: 2.5rem;
+}
+
+.primary {
+  color: var(--ink);
+  border-color: var(--ink-faint);
+}
+
+.dismiss {
+  color: var(--ink-muted);
+}
+
+.primary:hover,
+.dismiss:hover {
+  border-color: var(--ink);
+  color: var(--ink);
+}

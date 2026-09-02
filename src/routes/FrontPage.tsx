@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
+import { useOnline } from '../hooks/useOnline';
 import { usePullToRefresh } from '../hooks/usePullToRefresh';
 import type { BookmarkRecord, ImageCacheRecord } from '../lib/db';
 import {
@@ -14,6 +15,7 @@ import {
   ApiError,
   useEnsureText,
   useImageCache,
+  usePendingActions,
   useResolveImages,
   useSync,
   useTextFor,
@@ -39,6 +41,8 @@ export function FrontPage() {
   const { data: images } = useImageCache();
   const sync = useSync();
   const resolve = useResolveImages();
+  const { data: pending } = usePendingActions();
+  const online = useOnline();
   const ensureText = useEnsureText();
   const [error, setError] = useState<string | null>(null);
 
@@ -143,6 +147,28 @@ export function FrontPage() {
       {error !== null && (
         <p className={styles.error} role="alert">
           {error}
+        </p>
+      )}
+
+      {/*
+        What has not reached Instapaper yet.
+
+        Worth a line on the front page rather than a silent retry, because the article
+        is already gone from this screen: without it, "I archived that on the train"
+        and "Instapaper knows I archived that" are indistinguishable until you open
+        Instapaper somewhere else. It says nothing at all when the queue is empty,
+        which is almost always.
+      */}
+      {pending !== undefined && pending.length > 0 && (
+        <p className={styles.pending}>
+          {pending.length === 1
+            ? '1 action is waiting to reach Instapaper'
+            : `${String(pending.length)} actions are waiting to reach Instapaper`}
+          {online
+            ? ' — sending…'
+            : pending.length === 1
+              ? ' — it will be sent when you are back online.'
+              : ' — they will be sent when you are back online.'}
         </p>
       )}
 

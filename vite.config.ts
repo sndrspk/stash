@@ -44,6 +44,39 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,woff2,png,svg,ico}'],
         // Never let the shell's navigation fallback answer for a function call.
         navigateFallbackDenylist: [/^\/api\//],
+        runtimeCaching: [
+          {
+            /*
+             * Article images, from whichever publisher's CDN they live on.
+             *
+             * Cache-first, because these are immutable in practice: the URL came out
+             * of one page's `og:image` and a publisher who changes the picture
+             * changes the URL. Revalidating would cost a request per image on every
+             * front page for an answer that is always "unchanged".
+             *
+             * Scoped by destination rather than by host — there is no list of hosts
+             * to write, since the articles come from anywhere — and deliberately not
+             * matched on `/api/`, which is same-origin and never an image.
+             */
+            urlPattern: ({ request, url }) =>
+              request.destination === 'image' && !url.pathname.startsWith('/api/'),
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'stash-article-images',
+              expiration: {
+                // A front page shows at most a handful; this covers a deep queue and
+                // months of them, and still cannot grow without bound.
+                maxEntries: 300,
+                maxAgeSeconds: 60 * 60 * 24 * 60,
+                purgeOnQuotaError: true,
+              },
+              // Opaque responses from a cross-origin CDN have status 0, and without
+              // this every one of them would be discarded as a failure — which is
+              // most article images.
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+        ],
       },
       devOptions: {
         // Off by default: a service worker caching a dev server is a debugging tax.

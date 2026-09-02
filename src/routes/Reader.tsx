@@ -4,9 +4,11 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { TypographyPanel } from '../components/TypographyPanel';
 import { useColumnLayout } from '../hooks/useColumnLayout';
 import { useColumnSnap } from '../hooks/useColumnSnap';
+import { useOnline } from '../hooks/useOnline';
 import { removeFurniture } from '../lib/cleaners';
 import type { BookmarkRecord } from '../lib/db';
 import { needsExtraction } from '../lib/extraction';
+import type { FlushResult } from '../lib/pending';
 import { prefsToCss, DEFAULT_PREFS, resolveReadingMode } from '../lib/prefs';
 import { useReadingMode } from '../hooks/useReadingMode';
 import {
@@ -62,6 +64,7 @@ export function Reader() {
 
   // Paged or scrolling. `auto` — the default — is scrolling on a phone and paged
   // everywhere else; see `resolveReadingMode`.
+  const online = useOnline();
   const device = useReadingMode();
   const mode = resolveReadingMode(prefs.mode, device);
   const paged = mode === 'paged';
@@ -285,10 +288,22 @@ export function Reader() {
       });
   }
 
-  function run(promise: Promise<unknown>, what: string) {
+  /*
+   * Archive and delete.
+   *
+   * Leaving the article is unconditional now, and that is the point of the queue:
+   * the mark is on disk before the request goes out, so a reader on a train gets the
+   * same behaviour as one on wifi and the send happens whenever it can. The only
+   * outcome that changes what happens next is the gate having lapsed — which is not
+   * a fact about this article, and is answered by the unlock screen rather than by an
+   * error banner.
+   */
+  function run(promise: Promise<FlushResult>, what: string) {
     setError(null);
     promise
-      .then(() => navigate('/'))
+      .then((result) => {
+        navigate(result.unauthorized ? '/unlock' : '/', { replace: result.unauthorized });
+      })
       .catch((cause: unknown) => {
         setError(`Could not ${what}: ${cause instanceof Error ? cause.message : 'unknown error'}`);
       });
@@ -408,24 +423,53 @@ export function Reader() {
       >
         {isLoading ? (
           <p className={styles.notice}>Fetching the article…</p>
-        ) : isError ? (
+        ) : isError && online ? (
           <p className={styles.notice} role="alert">
             The article could not be fetched. It may be worth trying again from the front page.
           </p>
-        ) : !ready ? (
+        ) : !ready || isError ? (
+          /*
+           * No text — and the reason matters, because there are two of them and the
+           * reader can act on only one.
+           *
+           * Offline, this article simply has not been fetched yet, and saying "a
+           * paywall, a video page, or a PDF" is a confident diagnosis of the wrong
+           * thing: the article may be perfectly ordinary and one connection away. The
+           * offer of a fetch is wrong there too — it cannot work, and a button that
+           * cannot work is worse than no button.
+           *
+           * Note the condition, which the browser run corrected: with no network the
+           * text query *throws* rather than returning nothing, so an un-downloaded
+           * article arrives here as `isError` and not as `!ready`. Both land in this
+           * branch when offline, and "could not be fetched, try again from the front
+           * page" is kept for the case where there is a network and it genuinely
+           * failed.
+           */
           <div className={styles.notice}>
-            <p>Instapaper has no text for this one — a paywall, a video page, or a PDF.</p>
-            {bookmark !== undefined && (
-              <p>
-                <button
-                  type="button"
-                  className={styles.action}
-                  disabled={extract.isPending}
-                  onClick={() => runExtract(true)}
-                >
-                  {extract.isPending ? 'Fetching…' : 'Fetch full content'}
-                </button>
-              </p>
+            {online ? (
+              <>
+                <p>Instapaper has no text for this one — a paywall, a video page, or a PDF.</p>
+                {bookmark !== undefined && (
+                  <p>
+                    <button
+                      type="button"
+                      className={styles.action}
+                      disabled={extract.isPending}
+                      onClick={() => runExtract(true)}
+                    >
+                      {extract.isPending ? 'Fetching…' : 'Fetch full content'}
+                    </button>
+                  </p>
+                )}
+              </>
+            ) : (
+              <>
+                <p>This one has not been downloaded yet, and you are offline.</p>
+                <p className={styles.muted}>
+                  Articles you have already opened are readable without a network. This one will
+                  load the next time you have one.
+                </p>
+              </>
             )}
           </div>
         ) : (
