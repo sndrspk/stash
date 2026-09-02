@@ -10,6 +10,7 @@ import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tansta
 
 import { ApiError } from './api-error.js';
 import type { BookmarkRecord } from './db.js';
+import { extractArticle, type ExtractionResult } from './extraction.js';
 import { resolveImages, type ImagePassResult } from './images.js';
 import type { ReadingPrefs } from './prefs.js';
 import {
@@ -21,6 +22,7 @@ import {
   readBookmark,
   readPrefs,
   readTextFor,
+  readTextSources,
   readUnread,
   restore,
   writePrefs,
@@ -35,6 +37,8 @@ export const keys = {
   images: ['images'] as const,
   text: (ids: readonly number[]) => ['text', [...ids].sort((a, b) => a - b)] as const,
   article: (id: number) => ['article', id] as const,
+  /** Both sources for one article, so "show original" needs no second fetch. */
+  articleSources: (id: number) => ['article', id, 'sources'] as const,
   prefs: ['prefs'] as const,
 };
 
@@ -170,6 +174,42 @@ export function useArticleText(id: number) {
     },
     staleTime: Infinity,
     enabled: Number.isInteger(id) && id > 0,
+  });
+}
+
+/**
+ * Both stored copies of one article.
+ *
+ * This is what "store beside, never over" buys: the reading view can offer the
+ * original with nothing fetched and nothing lost, because the Instapaper text was
+ * never overwritten in the first place.
+ */
+export function useArticleSources(id: number) {
+  return useQuery({
+    queryKey: keys.articleSources(id),
+    queryFn: () => readTextSources(id),
+    staleTime: Infinity,
+    enabled: Number.isInteger(id) && id > 0,
+  });
+}
+
+/**
+ * Re-extract one article from the publisher's own page.
+ *
+ * Every gate lives in `extraction.ts`, including the one that matters here: passing
+ * `force` is what an explicit "fetch full content" does, and it skips the truncation
+ * check, the backoff and the already-extracted check alike.
+ */
+export function useExtractArticle() {
+  const client = useQueryClient();
+
+  return useMutation<ExtractionResult, Error, { bookmark: BookmarkRecord; force?: boolean }>({
+    mutationFn: ({ bookmark, force }) => extractArticle(bookmark, { force }),
+    onSuccess: (result, { bookmark }) => {
+      if (result.outcome?.kind === 'extracted') {
+        void client.invalidateQueries({ queryKey: ['article', bookmark.bookmark_id] });
+      }
+    },
   });
 }
 

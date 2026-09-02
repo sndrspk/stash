@@ -198,13 +198,44 @@ export async function readText(
 }
 
 /**
- * Both sources for a bookmark, with the derived accessor the reading view uses:
- * extracted wins when present, because it only exists when `get_text` came back
- * truncated.
+ * Both sources for a bookmark, reduced to the one the reading view should show.
+ *
+ * Extracted wins when present, because it only exists when `get_text` came back
+ * truncated — but **only when it has something in it**. An empty `extracted` row is
+ * not an article: it is how `extraction.ts` records a failed attempt and starts the
+ * week before the next one. Preferring it blindly would answer a perfectly good
+ * Instapaper article with a blank screen, and would do so precisely for the
+ * articles where extraction was needed and did not work.
  */
+export function bestOf(rows: readonly ArticleTextRecord[]): ArticleTextRecord | undefined {
+  const extracted = rows.find((row) => row.source === 'extracted');
+  if (extracted !== undefined && extracted.html.trim() !== '') return extracted;
+  return rows.find((row) => row.source === 'instapaper');
+}
+
 export async function readBestText(id: number): Promise<ArticleTextRecord | undefined> {
+  return bestOf(await (await getDb()).getAllFromIndex('article_text', 'by_bookmark', id));
+}
+
+export interface TextSources {
+  instapaper: string | null;
+  extracted: string | null;
+}
+
+/**
+ * Both copies, as they are stored.
+ *
+ * An empty extracted row reads back as `null` rather than as an empty string: it is
+ * a recorded failure, not an article, and the reading view should offer no toggle
+ * for it.
+ */
+export async function readTextSources(id: number): Promise<TextSources> {
   const rows = await (await getDb()).getAllFromIndex('article_text', 'by_bookmark', id);
-  return rows.find((r) => r.source === 'extracted') ?? rows.find((r) => r.source === 'instapaper');
+  const pick = (source: TextSource) => {
+    const html = rows.find((row) => row.source === source)?.html ?? '';
+    return html.trim() === '' ? null : html;
+  };
+  return { instapaper: pick('instapaper'), extracted: pick('extracted') };
 }
 
 /**
@@ -223,10 +254,7 @@ export async function readTextFor(ids: readonly number[]): Promise<Map<number, s
   const out = new Map<number, string>();
   for (const id of new Set(ids)) {
     const rows = await index.getAll(id);
-    // Extracted wins when present, exactly as `readBestText` decides it.
-    const best =
-      rows.find((row) => row.source === 'extracted') ??
-      rows.find((row) => row.source === 'instapaper');
+    const best = bestOf(rows);
     if (best) out.set(id, best.html);
   }
 

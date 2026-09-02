@@ -364,9 +364,18 @@
   max-width: 34rem;
   margin: var(--space-16) auto;
   padding: 0 var(--space-6);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
   font-family: var(--font-ui);
   color: var(--ink-muted);
   text-align: center;
+}
+
+.muted {
+  font-size: var(--text-sm);
+  color: var(--ink-faint);
 }
 
 /* --- tap zones --- */
