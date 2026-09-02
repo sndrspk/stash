@@ -30,7 +30,20 @@ import { isTruncated } from './truncation.js';
 export const RETRY_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
 
 export type ExtractOutcome =
-  | { kind: 'extracted'; html: string; truncated: boolean }
+  | {
+      kind: 'extracted';
+      html: string;
+      truncated: boolean;
+      /**
+       * The publisher served a stub even though a session was replayed for that host.
+       *
+       * Reported, not acted on: `docs/EXTRACTION.md` is explicit that one bad
+       * extraction is not proof a session is dead, and this signal cannot tell an
+       * expired session from a page that builds its body with JavaScript. So it
+       * becomes a sentence and a re-paste link, never an automatic sign-out.
+       */
+      sessionExpired: boolean;
+    }
   | { kind: 'failed'; tag: string }
   | { kind: 'blocked'; tag: string };
 
@@ -74,11 +87,17 @@ async function requestExtract(url: string, excerpt: string): Promise<ExtractOutc
     html?: string;
     tag?: string;
     truncated?: boolean;
+    sessionExpired?: boolean;
   };
   if (body.ok !== true || typeof body.html !== 'string' || body.html.trim() === '') {
     return { kind: 'failed', tag: body.tag ?? 'Extraction returned nothing' };
   }
-  return { kind: 'extracted', html: body.html, truncated: body.truncated === true };
+  return {
+    kind: 'extracted',
+    html: body.html,
+    truncated: body.truncated === true,
+    sessionExpired: body.sessionExpired === true,
+  };
 }
 
 /**

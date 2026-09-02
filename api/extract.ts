@@ -13,14 +13,16 @@
  * constraint, not a preamble** — this never claims to be a crawler, and the only
  * thing it unlocks is a page the reader already has the right to read.
  *
- * Site sessions are attached here in Phase 7b. Until then the fetch is anonymous,
- * which already handles soft paywalls, and the wire behaviour is identical with an
- * empty jar — the safe one-line change the staged order relies on.
+ * Site sessions are attached here. With an empty store the jar sends nothing and the
+ * wire behaviour is identical to the anonymous pass — which is what made this the safe
+ * one-line change SanFeedBin's staged build order relies on.
  */
 import { cleanExtracted } from '../src/lib/cleaners.js';
+import { cookieHeaderFor } from '../src/lib/cookies.js';
 import { BlockedUrlError, assertFetchable } from '../src/lib/fetch-guard.js';
 import { extract } from '../src/lib/extract.js';
 import { requireSession } from '../src/lib/guard.js';
+import { loadJar, openSessionContext } from '../src/lib/site-sessions.js';
 import { isTruncated } from '../src/lib/truncation.js';
 
 /** Longer than the image resolver's: this is one article a reader is waiting for. */
@@ -60,7 +62,24 @@ export async function GET(request: Request): Promise<Response> {
     throw error;
   }
 
-  const result = await extract(target.toString(), { timeoutMs: TIMEOUT_MS });
+  /*
+   * The jar.
+   *
+   * A store that is missing, misconfigured or unreachable must not stop an anonymous
+   * extraction: fetching with no cookies is the first stage of this design and is
+   * independently useful, so a broken store degrades to it rather than failing the
+   * request. The settings screen is where that problem is reported; here it would only
+   * turn a readable article into an error.
+   */
+  let cookie: string | null = null;
+  try {
+    const sessions = await openSessionContext();
+    if (sessions !== null) cookie = cookieHeaderFor(target, await loadJar(sessions));
+  } catch {
+    cookie = null;
+  }
+
+  const result = await extract(target.toString(), { timeoutMs: TIMEOUT_MS, cookie });
 
   if (!result.ok) {
     /*
@@ -69,7 +88,10 @@ export async function GET(request: Request): Promise<Response> {
      * fine and the answer is real: this article cannot be extracted, which is
      * something the client caches and shows, not something it retries at once.
      */
-    return json({ url: result.url, ok: false, tag: result.tag, authenticated: false }, 200);
+    return json(
+      { url: result.url, ok: false, tag: result.tag, authenticated: result.authenticated },
+      200,
+    );
   }
 
   const html = cleanExtracted(result.html, {
@@ -81,11 +103,18 @@ export async function GET(request: Request): Promise<Response> {
    * The verdict travels with the article.
    *
    * Whether the *extraction* is itself a stub is the client's business — it decides
-   * whether to keep this or fall back — and it is also the expired-session signal
-   * in Phase 7b: extraction succeeded, output still trips the heuristic, and
-   * cookies were sent, means the session has almost certainly lapsed.
+   * whether to keep this or fall back — and it is also the expired-session signal:
+   * extraction succeeded, output still trips the heuristic, and cookies were sent for
+   * that host, means the session has almost certainly lapsed.
+   *
+   * Reported, never acted on. The spec is explicit that nothing auto-clears here, and
+   * the reason is that this signal has a second cause it cannot distinguish: a page
+   * whose body is assembled by client-side script looks exactly the same, and clearing
+   * a perfectly good session over one such article would be a silent regression the
+   * reader could only fix by pasting a header again.
    */
   const truncation = isTruncated(html);
+  const sessionExpired = result.authenticated && truncation.truncated;
 
   return json(
     {
@@ -100,6 +129,7 @@ export async function GET(request: Request): Promise<Response> {
       authenticated: result.authenticated,
       truncated: truncation.truncated,
       truncationReasons: truncation.reasons,
+      sessionExpired,
     },
     200,
   );

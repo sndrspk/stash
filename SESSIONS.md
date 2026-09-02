@@ -10,7 +10,11 @@ This is the whole procedure. It takes about two minutes per publisher.
 desktop browser. This is not possible on a phone — see [Why not on a phone](#why-not-on-a-phone).
 
 **In short:** sign in → copy one line from your browser's developer tools → paste it into
-`npm run session -- add` → check it worked with `npm run probe`.
+**Settings → Publisher sessions** in the app → read one of that publisher's articles.
+
+Everything below describes both ways of doing step 3: the app's settings screen, which is what a
+deployment uses, and `npm run session -- add`, which is the same thing on your own machine for the
+probe. Steps 1 and 2 — the part that takes the two minutes — are identical either way.
 
 ---
 
@@ -67,7 +71,27 @@ Developer tools are hidden by default:
 
 ## Step 3 — Give it to Stash
 
-Three ways. Pick whichever suits you — they do the same thing.
+### In the app
+
+Open **Settings → Publisher sessions**, put the publisher in the first box — `www.ft.com`, or the
+whole article URL, which is easier since it is already on your clipboard — paste the header into the
+second, and press **Save session**.
+
+It answers with the cookie *names* it stored and nothing else:
+
+> Stored 26 cookies for www.nieuwsblad.be.
+
+The list below then shows that publisher, its cookie names, and how long ago you pasted it. **Sign
+out** forgets one. There is no way to read a value back out, from the screen or from the API — the
+server does not have an endpoint that returns one.
+
+If the screen says no key-value store is attached, see
+[Where they live once Stash is deployed](#where-they-live-once-stash-is-deployed).
+
+### On the command line
+
+For `npm run probe`, which reads a local file rather than the deployment's store. Three ways — they
+do the same thing.
 
 **Paste at a prompt** (simplest):
 
@@ -206,6 +230,18 @@ There, the values are encrypted under `STASH_ENCRYPTION_KEY` before being writte
 provider stores ciphertext, and they are never sent to the browser — the page asks your deployment
 for an article, and the server-side function attaches the cookies.
 
+**Setting it up.** Attach a KV store to the project; most hosts then inject the two variables the app
+looks for (`KV_REST_API_URL` and `KV_REST_API_TOKEN`, or Upstash's `UPSTASH_REDIS_REST_URL` /
+`_TOKEN`). Then set `STASH_ENCRYPTION_KEY` to 32 random bytes — `openssl rand -base64 32`. Both, or
+neither: a store with no key is refused rather than filled with plaintext credentials, and no store
+at all is a perfectly good deployment that still extracts articles anonymously.
+
+**Rotating `STASH_ENCRYPTION_KEY` orphans every stored session.** The old blobs cannot be read with a
+new key, so they are cleared on the next read and the settings screen names the hosts that went. You
+paste them again. It does *not* touch the Instapaper token, which is a separate environment variable
+and is not in the store at all — that separation is deliberate, because re-acquiring site sessions
+means walking through every publisher and re-authorising Instapaper does not.
+
 ### One session per publisher, not per device
 
 Because that store lives with your deployment rather than on a device, **you do this once per
@@ -230,9 +266,11 @@ and IP address that earned it, which Stash doesn't reproduce, and `__cf_bm` expi
 Such a session can work for a while and then stop for reasons that have nothing to do with your
 login. It's the first thing to suspect when one publisher starts failing while the others are fine.
 
-Once Stash is built it will tell you rather than failing quietly: if a fetch succeeds but the text
-still looks truncated *and* cookies were sent, you get a "session may have expired" prompt. It never
-clears a session by itself — one bad article isn't proof.
+Stash tells you rather than failing quietly: if a fetch succeeds but the text still looks truncated
+*and* cookies were sent for that host, the reading view says "the session for … may have expired",
+with a link to the sessions screen. It never clears a session by itself — one bad article isn't
+proof, and the same symptom is produced by a page that builds its body with JavaScript, which no
+cookie can fix.
 
 ---
 
@@ -291,8 +329,10 @@ setting a publisher up once on a desktop covers every device you read on afterwa
 - **Only `name=value` pairs.** `Secure`, `HttpOnly`, `Path`, `Expires` and `SameSite` are discarded.
   Every publisher is HTTPS, the cookies sit at the root, and expiry is enforced by the publisher
   anyway.
-- **Values are never displayed.** Every command prints cookie names only. The same rule holds in the
-  app: settings will list which publishers have a session, never what it contains.
+- **Values are never displayed.** Every command prints cookie names only, and so does the settings
+  screen: it lists which publishers have a session and what the cookies are called, never what they
+  contain. This is enforced by the API rather than by the page — the endpoint that lists sessions
+  cannot return a value, and the one accessor that can is used by the extractor alone.
 - **Cookies go only to the host they were saved for**, by strict RFC 6265 matching, and are dropped
   on a redirect to another host rather than forwarded.
 - **Nothing is sent anywhere but the publisher itself.** Your session is used for one thing: fetching

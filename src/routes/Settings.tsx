@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+import { SiteSessions } from '../components/SiteSessions';
 import { TO_UNLOCK, classifyStatusResponse, type Status } from '../lib/status-view';
 import styles from './Settings.module.css';
 
@@ -89,6 +90,11 @@ export function Settings() {
       </section>
 
       <section className={styles.section}>
+        <h2 className={styles.heading}>Publisher sessions</h2>
+        <SiteSessions />
+      </section>
+
+      <section className={styles.section}>
         <h2 className={styles.heading}>This device</h2>
         <button className={styles.button} type="button" onClick={() => void signOut()}>
           Sign out
@@ -100,10 +106,7 @@ export function Settings() {
 
       <section className={styles.section}>
         <h2 className={styles.heading}>Still to come</h2>
-        <p className={styles.muted}>
-          Appearance, cache size and clear-cache arrive with Phase 9. Publisher sessions arrive with
-          Phase 7b.
-        </p>
+        <p className={styles.muted}>Appearance, cache size and clear-cache arrive with Phase 9.</p>
       </section>
     </div>
   );

@@ -47,7 +47,6 @@ export function Reader() {
   const { data: sources } = useArticleSources(id);
   const extract = useExtractArticle();
   const [showOriginal, setShowOriginal] = useState(false);
-  const [extractNote, setExtractNote] = useState<string | null>(null);
   const { data: stored } = useReadingPrefs();
   const setPrefs = useSetReadingPrefs();
   const prefs = stored ?? DEFAULT_PREFS;
@@ -88,14 +87,29 @@ export function Reader() {
   /*
    * Whether to offer "fetch full content".
    *
-   * Offered when Instapaper's own copy trips the truncation heuristic and there is
-   * no extraction yet — the same question `extraction.ts` asks itself, deliberately
-   * through the same function so the button and the gate cannot disagree.
+   * The question is about **what is on screen**, not about what is in the cache, and
+   * the difference is the whole point. Keyed on "there is no extraction yet", the
+   * button vanished the moment a stub extraction was stored — so an article that had
+   * been fetched once and come back paywalled offered no way to try again, which is
+   * exactly the article a reader has just gone and pasted a session for. Asked this
+   * way, the offer stands for as long as the reader is looking at a stub.
+   *
+   * It costs nothing when there is nothing to do: `force` is absent from the automatic
+   * pass below, so a stored extraction still short-circuits on the already-extracted
+   * gate rather than fetching. `needsExtraction` is the same function `extraction.ts`
+   * uses, so the button and the gate cannot disagree about what a stub is.
+   *
+   * `textLoaded` is not decoration. Without it the first render — before the query has
+   * resolved — asks `needsExtraction(undefined)`, which is `true` by design, and the
+   * automatic pass below fires for *every* article a reader opens. `extraction.ts`
+   * re-checks against IndexedDB, but that row is written by this very query, so the
+   * re-check reads nothing and agrees. The result is a fetch of the publisher's page
+   * for a full article that never needed one, and an extraction stored beside text
+   * that was fine. The browser run caught it as every fixture rendering the same
+   * extracted text; "not loaded yet" and "is a stub" must not be the same answer.
    */
-  const canExtract =
-    bookmark !== undefined &&
-    sources?.extracted == null &&
-    needsExtraction(sources?.instapaper ?? undefined);
+  const textLoaded = !isLoading && html !== undefined;
+  const canExtract = bookmark !== undefined && textLoaded && needsExtraction(shown);
 
   /*
    * Whether the text already opens with its own headline.
@@ -147,6 +161,48 @@ export function Reader() {
     if (!canExtract || bookmark === undefined) return;
     startExtract({ bookmark });
   }, [canExtract, bookmark, startExtract]);
+
+  /*
+   * What the last extraction has to say for itself.
+   *
+   * Derived from the mutation rather than pushed into state by the button, because the
+   * automatic pass produces exactly the same outcomes and a reader who never pressed
+   * anything still deserves to be told that a session looks dead. The one thing that
+   * *is* conditional on the button is the "nothing to fetch" line: the automatic pass
+   * skips routinely and by design — backoff, already extracted, not truncated — and
+   * announcing each of those would be noise on every second article.
+   */
+  const note = useMemo((): { text: string; sessions?: boolean } | null => {
+    if (extract.isPending) return null;
+    if (extract.error) {
+      return { text: `Could not fetch: ${extract.error.message}` };
+    }
+
+    const outcome = extract.data?.outcome;
+    const forced = extract.variables?.force === true;
+    if (outcome == null) return forced ? { text: 'Nothing to fetch.' } : null;
+
+    if (outcome.kind === 'blocked') return { text: `That page cannot be fetched: ${outcome.tag}.` };
+    if (outcome.kind === 'failed') {
+      return { text: `The publisher's page could not be read: ${outcome.tag}.` };
+    }
+    if (!outcome.truncated) return null;
+
+    /*
+     * The expired-session diagnostic. Both branches are stubs; what separates them is
+     * whether cookies were actually sent for this host, which only the server knows —
+     * so it is the server that decides, and this only phrases it.
+     */
+    return outcome.sessionExpired
+      ? {
+          text: `The session for ${bookmark ? hostOf(bookmark.url) : 'this publisher'} may have expired — the page still came back as a stub with it. Nothing has been cleared; paste a fresh one to be sure.`,
+          sessions: true,
+        }
+      : {
+          text: 'Fetched, but it still looks like a stub — this publisher may want a signed-in session.',
+          sessions: true,
+        };
+  }, [extract.isPending, extract.error, extract.data, extract.variables, bookmark]);
 
   const failed = archive.error ?? remove.error;
   useEffect(() => {
@@ -214,37 +270,18 @@ export function Reader() {
    *
    * `force` is the whole of it: an explicit request is a decision, not a hint, so it
    * skips the truncation gate, the week-long backoff and the already-extracted check
-   * alike. Everything it can report back is a fact about this article, which is why
-   * a failure lands in a note beside the button rather than in the error banner.
+   * alike. What it reports is derived from the mutation below rather than set here,
+   * because the automatic pass produces the same facts and they deserve the same line.
    */
   function runExtract(force: boolean) {
-    setExtractNote(null);
     extract
       .mutateAsync({ bookmark: bookmark as BookmarkRecord, force })
       .then((result) => {
-        if (result.outcome?.kind === 'extracted') {
-          setShowOriginal(false);
-          setExtractNote(
-            result.outcome.truncated
-              ? 'Fetched, but it still looks like a stub — the publisher may want a signed-in session.'
-              : null,
-          );
-          return;
-        }
-        if (result.outcome?.kind === 'blocked') {
-          setExtractNote(`That page cannot be fetched: ${result.outcome.tag}.`);
-          return;
-        }
-        if (result.outcome?.kind === 'failed') {
-          setExtractNote(`The publisher's page could not be read: ${result.outcome.tag}.`);
-          return;
-        }
-        setExtractNote('Nothing to fetch.');
+        if (result.outcome?.kind === 'extracted') setShowOriginal(false);
       })
-      .catch((cause: unknown) => {
-        setExtractNote(
-          `Could not fetch: ${cause instanceof Error ? cause.message : 'unknown error'}`,
-        );
+      .catch(() => {
+        // Reported through `extract.error` in `note` below. Swallowed here only so an
+        // offline click is not an unhandled rejection.
       });
   }
 
@@ -343,6 +380,26 @@ export function Reader() {
         </p>
       )}
 
+      {/*
+        One render site for the extraction note, above the article rather than inside
+        the empty state. A stub that Instapaper *did* return text for renders as an
+        article, so a note living in the empty state would be invisible in precisely
+        the case the diagnostic exists for.
+      */}
+      {note !== null && (
+        <p className={styles.note}>
+          {note.text}
+          {note.sessions === true && (
+            <>
+              {' '}
+              <button type="button" className={styles.link} onClick={() => navigate('/settings')}>
+                Publisher sessions
+              </button>
+            </>
+          )}
+        </p>
+      )}
+
       <div
         className={paged ? styles.viewport : styles.viewportScrolling}
         ref={scroller}
@@ -370,7 +427,6 @@ export function Reader() {
                 </button>
               </p>
             )}
-            {extractNote !== null && <p className={styles.muted}>{extractNote}</p>}
           </div>
         ) : (
           <article

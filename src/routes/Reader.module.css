@@ -66,6 +66,26 @@
     padding: var(--space-2) var(--space-3);
     padding-left: max(var(--space-3), env(safe-area-inset-left));
     padding-right: max(var(--space-3), env(safe-area-inset-right));
+
+    /*
+     * The bar wraps rather than overflowing.
+     *
+     * Dropping the crumb bought room for four controls, and a stub article has six:
+     * Close, Original, Aa, Full text, Archive, Delete. Squeezing them is not an
+     * option — Delete simply left the right edge of a 390px screen — and hiding one
+     * would hide the retry on precisely the article a reader has just pasted a
+     * session for. A second row is the honest answer, and it is the one that stays
+     * correct the next time a control is added.
+     */
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  /* `margin-left: auto` keeps this group against the right edge whether it shares the
+     first row or has wrapped onto its own. */
+  .actions {
+    flex-wrap: wrap;
+    margin-left: auto;
   }
 
   .action,
@@ -128,6 +148,33 @@
   background: var(--paper-sunken);
   font-family: var(--font-ui);
   font-size: var(--text-sm);
+}
+
+/*
+ * The extraction note. Deliberately not `.error`: "the session may have expired" is
+ * information about a publisher, not a failure of the app, and a red rule beside it
+ * would make an ordinary paywall look like something broke.
+ */
+.note {
+  flex: 0 0 auto;
+  padding: var(--space-2) var(--space-4);
+  border-left: 3px solid var(--rule);
+  background: var(--paper-sunken);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  line-height: var(--leading-relaxed);
+  color: var(--ink-muted);
+}
+
+.link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  cursor: pointer;
 }
 
 /* --- the article --- */
@@ -371,11 +418,6 @@
   font-family: var(--font-ui);
   color: var(--ink-muted);
   text-align: center;
-}
-
-.muted {
-  font-size: var(--text-sm);
-  color: var(--ink-faint);
 }
 
 /* --- tap zones --- */

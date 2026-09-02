@@ -43,7 +43,14 @@ beforeEach(async () => {
 });
 
 /** A fetcher that answers from a table and records what it was asked. */
-function recording(outcome: ExtractOutcome = { kind: 'extracted', html: FULL, truncated: false }) {
+function recording(
+  outcome: ExtractOutcome = {
+    kind: 'extracted',
+    html: FULL,
+    truncated: false,
+    sessionExpired: false,
+  },
+) {
   const asked: string[] = [];
   return {
     asked,
@@ -63,6 +70,31 @@ describe('needsExtraction', () => {
 
   it('is false for a full article', () => {
     expect(needsExtraction(FULL)).toBe(false);
+  });
+
+  it('answers `undefined` as "yes", which callers must not confuse with "not loaded yet"', () => {
+    /*
+     * Pinned deliberately, because the answer is right and the way it was used was
+     * wrong. The reading view asked this question on its first render, before the text
+     * query had resolved, and got `true` for every article a reader opened; the gate
+     * in `extractArticle` then agreed, because the IndexedDB row it re-checks against
+     * is written by that same query. Every article got a publisher fetch it did not
+     * need. The fix is at the call site — wait for the query — so this stays as it is
+     * and the caller carries the burden.
+     */
+    expect(needsExtraction(undefined)).toBe(true);
+  });
+});
+
+describe('an article whose text has not been fetched yet', () => {
+  it('is extracted, which is why the caller has to know the difference', async () => {
+    // With no stored Instapaper row there is nothing to judge, so the gate lets it
+    // through. Correct in isolation — and a fetch of a perfectly good article if the
+    // caller asks before the text has landed.
+    const { asked, fetchExtract } = recording();
+
+    await extractArticle(bookmark(), { fetchExtract, now: () => NOW });
+    expect(asked).toHaveLength(1);
   });
 });
 
@@ -256,7 +288,7 @@ describe('single-flight', () => {
     const fetchExtract = async (url: string): Promise<ExtractOutcome> => {
       asked.push(url);
       await gate;
-      return { kind: 'extracted', html: FULL, truncated: false };
+      return { kind: 'extracted', html: FULL, truncated: false, sessionExpired: false };
     };
 
     // No await between the two calls: the lock is taken synchronously, before any
