@@ -10,6 +10,7 @@ import { needsExtraction } from '../lib/extraction';
 import { removeFurniture } from '../lib/furniture';
 import type { FlushResult } from '../lib/pending';
 import { prefsToCss, DEFAULT_PREFS, resolveReadingMode } from '../lib/prefs';
+import { externalHref } from '../lib/sanitize';
 import { useReadingMode } from '../hooks/useReadingMode';
 import {
   ApiError,
@@ -81,6 +82,23 @@ export function Reader() {
    * is also the difference between a smooth reflow and a stutter.
    */
   const shown = showOriginal ? (sources?.instapaper ?? html) : html;
+
+  /*
+   * Where the text on screen came from, and a way out to the page it came from.
+   *
+   * `readBestText` prefers our extraction over Instapaper's, silently and correctly —
+   * but silently means a reader comparing this against the publisher's own page has no
+   * way to know which of the two they are looking at, and no way to tell "Instapaper
+   * dropped the standfirst" from "our extractor did". That distinction cost a session's
+   * worth of debugging on an article whose intro was missing.
+   *
+   * `externalHref` rather than the URL directly: it comes from Instapaper, it never
+   * passes through DOMPurify on this path, and React will render a `javascript:` href
+   * without complaint.
+   */
+  const usingExtraction = sources?.extracted != null && !showOriginal;
+  const provenance = usingExtraction ? 'Extracted by Stash' : 'Text from Instapaper';
+  const origin = bookmark === undefined ? null : externalHref(bookmark.url);
   const clean = useMemo(
     () => (shown === undefined ? '' : sanitizeArticle(removeFurniture(shown))),
     [shown],
@@ -488,10 +506,36 @@ export function Reader() {
               sits on a page. In the bar it would be a label; here it is the article
               beginning.
             */}
-            {!titleIsInText && bookmark && (bookmark.title || '').trim() !== '' && (
+            {bookmark && (
               <header className={styles.headline}>
-                <h1 className={styles.headlineText}>{bookmark.title}</h1>
-                <p className={styles.byline}>{hostOf(bookmark.url)}</p>
+                {!titleIsInText && (bookmark.title || '').trim() !== '' && (
+                  <h1 className={styles.headlineText}>{bookmark.title}</h1>
+                )}
+                {/*
+                  The provenance line, and it renders unconditionally.
+
+                  It used to come with the headline, which meant a publisher whose
+                  `get_text` keeps its own `<h1>` got no line at all — and those are
+                  exactly the articles where "where did this text come from?" is
+                  hardest to answer, since the Original toggle is also absent when
+                  there is no extraction to toggle to. Saying "Instapaper" only when
+                  something else is also true is not an indicator.
+                */}
+                <p className={styles.byline}>
+                  {origin === null ? (
+                    hostOf(bookmark.url)
+                  ) : (
+                    <a
+                      className={styles.origin}
+                      href={origin}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {hostOf(bookmark.url)}
+                    </a>
+                  )}
+                  <span className={styles.provenance}> · {provenance}</span>
+                </p>
               </header>
             )}
             <div

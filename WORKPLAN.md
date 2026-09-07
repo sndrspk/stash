@@ -1064,6 +1064,33 @@ Four things the real page taught that a synthetic one would not have:
 Verified against the page that prompted it — 5,266 → 5,667 characters, opening restored —
 and against every committed fixture, which are unchanged, since none carries the markup.
 
+**And it does not fix the article that prompted it**, which is the more useful finding. That
+article had no extraction stored: `get_text` returned it complete enough to pass the
+truncation heuristic, so the reading view was showing Instapaper's copy and our extractor
+had never run. The standfirst was missing because *Instapaper* dropped it. The fix above is
+real and the diagnosis of Readability's behaviour is correct; it simply addresses a path
+this article was not on.
+
+Nothing on screen said so, and that is the actual defect. `readBestText` prefers our
+extraction silently and correctly, the **Original** toggle renders only when an extraction
+exists to toggle to, and so the one article where "which copy am I reading?" matters most is
+the one that answers it least. A provenance line now renders unconditionally under the
+headline — the host, linked to the publisher's page, and whether the text came from
+Instapaper or from us. It cost a session of debugging to learn that this was unknowable
+from the interface.
+
+Two consequences worth carrying:
+
+- **A stored extraction is never refreshed when the extractor improves.** Every fix from
+  here is invisible on articles already cached, and there is no way to force a re-run: the
+  "Full text" button is gated on `needsExtraction`, which is false for anything that already
+  reads as complete. Open.
+- **The extraction-time cleaners never touch `get_text` output.** They run in `api/extract`
+  only, so an article Instapaper returns complete gets furniture removal at render and
+  nothing else. Whether they should is a real question — it would need a re-sync to apply
+  to what is cached — but "our cleaners only clean our own extraction" is not a rule anyone
+  would have chosen deliberately. Open.
+
 ### The store had a shape the design had not allowed for
 
 The first deployment to actually attach a store attached Redis Cloud, and Settings said no
