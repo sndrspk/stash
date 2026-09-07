@@ -1,11 +1,14 @@
+import { parseHTML } from 'linkedom';
 import { describe, expect, it } from 'vitest';
 
 import {
   MIN_HERO_WIDTH,
   cleanExtracted,
   findHeroImage,
+  findLede,
   normalizeTitle,
   removeDuplicateTitle,
+  restoreLede,
   restoreMissingIntro,
 } from '../src/lib/cleaners';
 import { plainText } from '../src/lib/truncation';
@@ -178,5 +181,104 @@ describe('cleanExtracted', () => {
   it('does nothing without metadata', () => {
     const fragment = '<h1>A headline</h1><p>Body.</p>';
     expect(cleanExtracted(fragment)).toBe(fragment);
+  });
+});
+
+/*
+ * The standfirst recovery.
+ *
+ * Readability returns the container with the highest density of paragraphs. A
+ * standfirst is routinely one `<h2>` in an `<hgroup>` beside the body — headline,
+ * standfirst, byline, date — and that group scores nothing, so the article's opening
+ * paragraph is dropped on every article that publisher runs while the extraction
+ * otherwise looks perfect. Shape taken from a real page.
+ */
+function pageWith(intro: string, attrs = 'data-testid="article-intro"'): Document {
+  const { document } = parseHTML(`<!doctype html><html><body>
+    <article>
+      <hgroup>
+        <h1 data-testid="article-headline">The headline</h1>
+        <h2 ${attrs}>${intro}</h2>
+      </hgroup>
+      <div class="article-body_articleBody__uvPY2">
+        <p>The body starts here and carries on for a while.</p>
+      </div>
+    </article>
+  </body></html>`) as unknown as { document: Document };
+  return document;
+}
+
+const LEDE = 'Anderlecht moet zeer dringend matchen over de streep leren trekken, en wel nu.';
+
+describe('findLede', () => {
+  it('finds a standfirst beside the body, not inside it', () => {
+    expect(findLede(pageWith(LEDE))).toBe(LEDE);
+  });
+
+  it('reads the marker out of a hashed CSS-module class', () => {
+    // `story-intro_storyIntro__7SJ5Q` is what a bundler emits, and the readable half is
+    // the only part that carries meaning. camelCase has to split too, or the hashed
+    // class of every modern site is invisible here.
+    expect(
+      findLede(pageWith(LEDE, 'class="Paragraph_paragraph__x story-intro_storyIntro__7SJ5Q"')),
+    ).toBe(LEDE);
+  });
+
+  it('does not match a word that merely contains a marker', () => {
+    // Dutch `ontdek-meer` contains `dek`; `leaderboard` contains `lead`. Substring
+    // matching here would key on an accident of spelling.
+    expect(findLede(pageWith(LEDE, 'class="ontdek-meer"'))).toBeNull();
+    expect(findLede(pageWith(LEDE, 'class="leaderboard-slot"'))).toBeNull();
+  });
+
+  it('ignores a label rather than prose', () => {
+    expect(findLede(pageWith('Analyse'))).toBeNull();
+  });
+
+  it('ignores a block that is mostly links', () => {
+    const links = Array.from(
+      { length: 6 },
+      (_, i) => `<a href="/x${String(i)}">Another article to read next about football</a>`,
+    ).join(' ');
+    expect(findLede(pageWith(links))).toBeNull();
+  });
+
+  it('ignores something too long to be a summary', () => {
+    expect(findLede(pageWith('word '.repeat(400)))).toBeNull();
+  });
+
+  it('separates a dateline from the first word', () => {
+    // `textContent` would give `BRUSSELAnderlecht`, which is what the reader would see.
+    expect(findLede(pageWith(`<span>BRUSSEL</span>${LEDE}`))).toBe(`BRUSSEL ${LEDE}`);
+  });
+});
+
+describe('restoreLede', () => {
+  it('puts the standfirst in front of the article', () => {
+    expect(restoreLede('<p>Body.</p>', LEDE)).toBe(`<p>${LEDE}</p><p>Body.</p>`);
+  });
+
+  it('does nothing when there is no standfirst', () => {
+    expect(restoreLede('<p>Body.</p>', null)).toBe('<p>Body.</p>');
+    expect(restoreLede('<p>Body.</p>', '   ')).toBe('<p>Body.</p>');
+  });
+
+  it('does not print it twice when Readability already kept it', () => {
+    // The failure this guard exists for is worse than the bug it accompanies, and
+    // harder to spot: a duplicated opening paragraph reads like the publisher's own
+    // repetition rather than like something we did.
+    const already = `<p>${LEDE}</p><p>Body.</p>`;
+    expect(restoreLede(already, LEDE)).toBe(already);
+  });
+
+  it('sees through the whitespace and entities Readability rewrites', () => {
+    const already = `<p>Anderlecht   moet zeer dringend matchen over de streep leren trekken,\nen wel nu.</p>`;
+    expect(restoreLede(already, LEDE)).toBe(already);
+  });
+
+  it('escapes what it inserts, since this is publisher text', () => {
+    const out = restoreLede('<p>Body.</p>', 'Tom & Jerry <script>alert(1)</script> went to town');
+    expect(out).toContain('&amp;');
+    expect(out).not.toContain('<script>');
   });
 });

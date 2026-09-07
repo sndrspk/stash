@@ -8,6 +8,7 @@
 
 import { Readability } from '@mozilla/readability';
 import { parseHTML } from 'linkedom';
+import { findLede, restoreLede } from './cleaners.js';
 import { guardedFetch, BlockedUrlError, type GuardedFetchOptions } from './fetch-guard.js';
 import { isTruncated, plainText, type TruncationVerdict } from './truncation.js';
 
@@ -72,18 +73,34 @@ export function extractFromHtml(html: string, url: string, authenticated = false
   if (html.trim() === '') return { ok: false, url, tag: 'Empty body', authenticated };
 
   let article: ReturnType<Readability['parse']>;
+  let lede: string | null;
   try {
     const { document } = parseHTML(withBase(html, url));
+
+    /*
+     * Before `parse`, and that ordering is load-bearing rather than tidy.
+     *
+     * Readability mutates the document it is handed — it strips as it scores — so the
+     * `<hgroup>` a standfirst lives in is gone by the time `parse` returns. Reading it
+     * afterwards finds nothing, on every page, which looks exactly like a publisher
+     * that has no standfirst.
+     */
+    lede = findLede(document as unknown as Document);
     article = new Readability(document as unknown as Document).parse();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return { ok: false, url, tag: tag(`Readability failed: ${message}`), authenticated };
   }
 
-  const content = article?.content ?? '';
-  if (content.trim() === '') {
+  const extracted = article?.content ?? '';
+  if (extracted.trim() === '') {
     return { ok: false, url, tag: 'Readability returned empty', authenticated };
   }
+
+  // Restored here rather than in `cleanExtracted`, because this is the only layer that
+  // still has the source page. `restoreLede` no-ops when the standfirst is already in
+  // the body, which is where plenty of publishers put it.
+  const content = restoreLede(extracted, lede);
 
   return {
     ok: true,
@@ -95,7 +112,15 @@ export function extractFromHtml(html: string, url: string, authenticated = false
     title: article?.title ?? null,
     byline: article?.byline ?? null,
     html: content,
-    text: article?.textContent?.trim() ?? plainText(content),
+    /*
+     * Derived from `content`, not from Readability's own `textContent`, whenever the
+     * standfirst was restored — otherwise `text` and `html` disagree about what the
+     * article says, and `text` is what the truncation heuristic and the probe report.
+     */
+    text:
+      content === extracted
+        ? (article?.textContent?.trim() ?? plainText(content))
+        : plainText(content),
     truncation: isTruncated(content),
   };
 }

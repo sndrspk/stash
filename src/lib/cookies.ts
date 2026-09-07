@@ -246,3 +246,34 @@ export function cookieHeaderFor(url: string | URL, store: SessionStore): string 
 export function cookieNames(header: string): string[] {
   return [...parseCookieHeader(header).keys()];
 }
+
+/**
+ * The broader host a `www.` one is hiding, or null.
+ *
+ * `domainMatches` sends a session saved for H to U when U is H or ends with `.H`, so
+ * `nrc.nl` covers `www.nrc.nl`, `podcast.nrc.nl` and the bare domain, while
+ * `www.nrc.nl` covers exactly one host. The apex is a superset, and it is almost always
+ * what someone means.
+ *
+ * They will nonetheless type the narrower one, because the documented way to fill this
+ * field is to paste the article URL you already have on the clipboard — and an article
+ * URL virtually always carries the `www`. So the convenient action and the correct one
+ * disagree, which is a thing to fix in the interface rather than in a warning nobody
+ * reads.
+ *
+ * Only `www.`, and deliberately: `podcast.nrc.nl` may be exactly what a reader intends,
+ * and offering to widen every subdomain would be guessing. `www` is the one prefix that
+ * is never a publisher's actual choice of where the articles live.
+ *
+ * Returns null when there is nothing to suggest, so the caller renders nothing.
+ */
+export function widerHost(input: string): string | null {
+  const host = coerceHost(input);
+  if (host === null || !host.startsWith('www.')) return null;
+
+  const apex = host.slice(4);
+  // Two labels minimum. Stripping `www.` off `www.localhost` would leave a
+  // single-label host, which `domainMatches` treats as exact-only anyway — so the
+  // suggestion would be a no-op dressed up as an improvement.
+  return apex.includes('.') && HOSTNAME.test(apex) ? apex : null;
+}

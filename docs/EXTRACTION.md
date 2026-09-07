@@ -40,6 +40,16 @@ Ported as specified:
   headings stripped; remove page furniture by stable signal (link target, marker string) **never by
   publisher name**; re-derive the hero image, preferring the first image inside a `<figure>`, then
   any image ≥600px wide, returning nothing rather than guessing.
+- **Standfirst recovery** — a fifth, added after a real page showed why the intro cleaner above is
+  not enough. Readability returns the container with the highest density of paragraphs, and a
+  standfirst is routinely a single `<h2>` in an `<hgroup>` beside the body — headline, standfirst,
+  byline, date — which scores nothing and is dropped. Recovered from the source page by marker
+  vocabulary (`standfirst`, `intro`, `lede`, `lead`, `chapeau`, `perex`, `dek`) in `data-testid`,
+  `class`, `id` or `itemprop`, matched as **whole tokens** after splitting separators and camelCase:
+  substring matching would key on an accident of spelling, since Dutch `ontdek-meer` contains `dek`.
+  Guarded as prose — 40–1500 characters, link density ≤25% — and skipped when the extraction already
+  contains it, because printing the opening paragraph twice is worse than dropping it and much
+  harder to notice. Runs **before** `Readability.parse`, which mutates the document it is given.
 - **Render-time cleaning.** Furniture removal runs at render, not extraction, so a new rule fixes
   already-cached articles without a re-sync. Worth keeping — it is why the rule list can grow
   cheaply.
