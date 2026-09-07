@@ -944,9 +944,28 @@ own store review. Build only if the paste step is what stops you using Stash.
       Instapaper an archive for something they wanted gone.
 - [x] Manifest, icons, splash screens, `theme-color`, iOS install metadata. Done in Phase 1 and
       verified here rather than rebuilt.
-- [ ] Lighthouse PWA + performance pass. **Not done** — deferred to Phase 9's deploy step, where it
-      can run against the real deployment rather than a stand-in server whose caching headers are
-      not the ones that will ship.
+- [x] Lighthouse pass — **run, with one half still owed to the real deployment.** Two findings the
+      wording of this item did not anticipate.
+
+      **There is no PWA category any more.** Lighthouse 13 offers performance, accessibility,
+      best-practices, SEO and agentic-browsing; the PWA category was removed from the tool. So the
+      installability half of this checkbox was never going to be answered by Lighthouse, whatever it
+      ran against, and is answered instead by the device run recorded under Phase 8 and by the
+      manifest and service-worker checks in a browser's application panel.
+
+      **Accessibility, best practices and SEO do not depend on the deployment**, so they were run
+      here against the production build, served with `vercel.json`'s own headers and its rewrite
+      rule, at 390×844 mobile emulation. Front page and reading view both: **accessibility 100,
+      best practices 100, SEO 100**, after the contrast fix below. Accessibility was 92 before it.
+
+      **Performance still is owed to the deployment**, and honestly so. Lighthouse's simulated Slow
+      4G over localhost is a model, not a measurement: there is no CDN, no TLS handshake and no real
+      latency in it. What it reports — 76 on the front page, 79 on the reading view — is worth
+      recording as a shape rather than a score, and the shape is unambiguous. Every remaining audit
+      below 1.0 that is not a timing metric says the same thing: unused JavaScript, unused CSS,
+      render-blocking requests, network dependency tree. One 411 kB chunk with no code splitting,
+      which is the same structural fact the chunk-size warning named. Splitting the routes is the
+      fix, and it is a change to make deliberately rather than to chase a number on a stand-in.
 
 **Done when:** the app installs on iOS and Android, opens offline, and shows a previously-read
 article with no network.
@@ -1014,9 +1033,12 @@ Two things the run found, both invisible to a unit test and one of them a real b
       than defending: "an explicit, per-item user click" was written before the offline queue
       existed, and now says why a queue that replays clicks is still that.
 
-**Status: done, with one caveat carried from Phase 8.** The Lighthouse pass deferred here still
-wants a real deployment — a stand-in server's caching headers are not the ones that ship, so a score
-against it would grade the wrong thing.
+**Status: done. The Lighthouse caveat is now half-answered and half-retired.** The accessibility,
+best-practices and SEO categories do not depend on the deployment and were run here — all three at
+100, after a contrast fix the audit prompted and hand-checking found to be worse than reported. The
+PWA category the item asked for no longer exists in the tool. What is still owed to a real
+deployment is the performance number alone, and what it would measure is already named: one
+unsplit chunk. Both are written up under Phase 8's checkbox and in the section on the audit above.
 
 **The browser run found a bug Phase 8 shipped**, and it is the sharpest example yet of a suite
 agreeing with itself. TanStack Query's default `networkMode: 'online'` **pauses** a mutation while
@@ -1030,6 +1052,38 @@ Phase 8's suite passed because of how it was written, not because the feature wo
 page — which is what a reader actually does — is what fires the event. Both mutations and queries
 are now `networkMode: 'always'`, which is not a workaround but an accurate description of what they
 depend on: IndexedDB.
+
+### The audit could only see one of ten sheets
+
+The accessibility half of the Lighthouse pass found one thing, and finding it was worth more
+than the score: `--ink-faint` at **3.52:1** on the default beige, against the 4.5:1 that WCAG
+AA asks for text at 12px. It carries the front page's dateline, the reading view's byline and
+crumb, and the provenance line added a moment earlier — all of it small, none of it exempt.
+
+The useful part is what the audit could not see. It runs against the page as loaded, and the
+page as loaded has one of five papers and one of two themes. Checking the rest by hand:
+
+| | worst ratio | |
+| --- | --- | --- |
+| `--ink-faint`, light, across five papers and their sunken variants | **2.99** | on sunken lilac |
+| `--ink-faint`, dark, across its three surfaces | **3.12** | on raised |
+
+So the real worst case was half a point below what was reported, on a sheet the audit never
+loaded, and **dark mode failed on all three of its surfaces without being measured at all**.
+`--ink` and `--ink-muted` are comfortable everywhere — 15.18 and 6.36 at worst — which is why
+this went unnoticed: the palette looks obviously fine until the one value that isn't gets
+measured on the one sheet that is worst for it.
+
+Now `#6b645b` light and `#8f867b` dark, each chosen against its worst surface rather than its
+default one: 4.67 and 4.85. Accessibility went 92 → 100 on the front page.
+
+`test/contrast.test.ts` is the part worth keeping. It reads the tokens straight out of
+`theme.css` and asserts all thirty ink-on-surface combinations, so the next palette change
+cannot pass by being tested on beige. Two guards beyond the ratios: the two dark blocks —
+`prefers-color-scheme` and `data-theme='dark'` — must stay identical, since a fix applied to
+one of them is a bug that appears only for a reader whose OS disagrees with their explicit
+choice; and the ink hierarchy must hold, because making every ink the same colour would
+satisfy every ratio and destroy the design. Both were checked by breaking them.
 
 ### The opening paragraph a publisher never gets to keep
 
