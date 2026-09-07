@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+import { versionLabel } from '../lib/version';
 import styles from './Unlock.module.css';
 
 /**
@@ -59,7 +60,10 @@ export function Unlock() {
   return (
     <main className={styles.wrap}>
       <form className={styles.card} onSubmit={onSubmit}>
-        <h1 className={styles.title}>Stash</h1>
+        <h1 className={styles.title}>
+          Stash
+          <span className={styles.version}>{versionLabel()}</span>
+        </h1>
         <p className={styles.blurb}>Enter the passphrase for this deployment.</p>
 
         <label className={styles.label} htmlFor="passphrase">

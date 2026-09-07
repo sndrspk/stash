@@ -32,6 +32,16 @@ git log --oneline origin/main..HEAD   # anything here is unmerged work — keep 
 Do this *before* the commit, not after the push. Discovering it afterwards means a
 rebase and a force-push that could have been avoided.
 
+## The version badge
+
+`APP_VERSION` in `src/lib/version.ts` is shown beside the wordmark. **Bump it in the
+PR that ships the change, to that PR's own number.** It cannot be derived — a
+production build runs from `main` after the merge and has no idea which pull request
+it came from — so it is a habit, not a mechanism, and `test/version.test.ts` can only
+check its shape and that it never goes backwards.
+
+A stale number is worse than none: it says a fix is live when it is not.
+
 ## Before you push
 
 ```sh

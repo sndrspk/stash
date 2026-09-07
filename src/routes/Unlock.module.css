@@ -83,3 +83,16 @@
   opacity: 0.45;
   cursor: default;
 }
+
+/* Beside the wordmark, for the same reason it sits beside the masthead heading:
+   the gate is the one screen a reader sees before anything else has loaded, so it
+   is where "which build is this?" can be answered even when the app cannot start. */
+.version {
+  margin-left: var(--space-2);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  color: var(--ink-faint);
+  vertical-align: baseline;
+}

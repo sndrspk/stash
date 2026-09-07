@@ -61,3 +61,25 @@
     padding: var(--space-6) var(--space-4);
   }
 }
+
+/* Wordmark and build number as one group, so the masthead's `space-between` still
+   sends this to the left and the nav to the right. */
+.brand {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+/*
+ * Small and faint on purpose: it is looked for when something seems wrong and never
+ * otherwise, so it must be legible without competing with the wordmark beside it.
+ * `--ink-faint` is AA at this size on every paper — see `test/contrast.test.ts`.
+ */
+.version {
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  color: var(--ink-faint);
+}

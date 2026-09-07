@@ -1053,6 +1053,39 @@ page — which is what a reader actually does — is what fires the event. Both 
 are now `networkMode: 'always'`, which is not a workaround but an accurate description of what they
 depend on: IndexedDB.
 
+### A merged change and a running build are different claims
+
+Twice in one afternoon a change was merged and appeared to do nothing. Once because the
+fix genuinely did not cover the case; once because the app was still running the previous
+build — `registerType: 'prompt'` installs a new one and waits to be accepted, which is the
+right behaviour for a reading app and indistinguishable, from the screen, from a change
+that did not work.
+
+The build number now sits beside the wordmark: `Stash v31`, numbered by the pull request
+that shipped it. Not semver, because the question it answers is not "what release is this"
+but "did the thing I merged reach me", and the number a reader already has in hand is the
+PR they merged.
+
+It sits beside the wordmark rather than inside its link — a version string is a label, not
+a destination — and in the shell's masthead rather than on the front page, so it is present
+on every screen except the reading view, which is deliberately bare. The gate carries its
+own copy, since that is the one screen reachable before the app has loaded anything.
+
+Two things to be honest about:
+
+- **It is a habit, not a mechanism.** A production build runs from `main` after the merge
+  and cannot know which PR it came from. `VERCEL_GIT_COMMIT_SHA` is available and truthful
+  but answers a different question: it identifies a commit, not a change someone reviewed
+  and merged. The number is bumped by hand, and a forgotten bump is worse than no number,
+  because it would report a fix as live when it is not. `test/version.test.ts` checks the
+  shape and that it never moves backwards; the rest is written down in `CLAUDE.md`.
+- **The first attempt went in the wrong place.** Asked for it beside the "Stash" heading, a
+  grep for `>Stash<` found only the unlock screen, and the badge went next to the front
+  page's "Unread" instead — the masthead's own wordmark lives in `AppLayout` with the text
+  on its own line, where that pattern does not match. Searching for the string as it would
+  appear in rendered output rather than in source is a way to be confidently wrong about a
+  file that is right there.
+
 ### Two questions the interface could not answer
 
 Confirming that a publisher session does anything turned out to be impossible from the
