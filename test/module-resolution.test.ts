@@ -2,6 +2,8 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+import { code } from './source-scan';
+
 /*
  * Relative imports in server-side code must carry a `.js` extension.
  *
@@ -40,7 +42,9 @@ describe('server-side module resolution', () => {
   });
 
   it.each(files)('%s uses .js extensions on relative imports', (file) => {
-    const source = readFileSync(file, 'utf8');
+    // Comments stripped first: these files explain their own imports in prose, and
+    // a quoted specifier in a sentence is not an import statement. See source-scan.
+    const source = code(readFileSync(file, 'utf8'));
     const offenders: string[] = [];
 
     for (const [, specifier] of source.matchAll(RELATIVE_IMPORT)) {

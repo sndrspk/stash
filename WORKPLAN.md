@@ -1022,6 +1022,46 @@ page — which is what a reader actually does — is what fires the event. Both 
 are now `networkMode: 'always'`, which is not a workaround but an accurate description of what they
 depend on: IndexedDB.
 
+### The deploy log was worth reading
+
+The first real deployment produced four build warnings. Three were noise — an unbounded
+`engines.node` range, a deprecated `glob` reached only through `workbox-build`, and npm asking
+whether esbuild's postinstall may run (it need not: the platform binary arrives as one of 26
+optional dependencies). The fourth was Vite saying a chunk had passed 500 kB, which reads like the
+same kind of boilerplate and was not.
+
+**Nearly a third of the client bundle was a second DOM.** `Reader.tsx` imported `removeFurniture`
+from `cleaners.ts`, and a bundler follows a module's imports rather than the export you asked for,
+so that one line pulled in linkedom and its parser stack — htmlparser2, css-select, cssom, domutils,
+css-what — to give a browser a DOM it already has. Attributing the bundle's bytes through a
+sourcemap put it at roughly 470 KiB unminified. Splitting furniture removal into `furniture.ts`, on
+the platform's own `DOMParser`, took the chunk from **600.00 kB to 411.13 kB** (197.37 → 131.34 kB
+gzipped) and the precache from 1062 KiB to 878 KiB. The 500 kB warning is gone with it.
+
+The split is not a new idea imposed on the module — it is the seam the file already documented.
+Three cleaners run at extraction, in a function, where linkedom is the only DOM available; the
+fourth was always described as running "at render, not at extraction", which means in a browser.
+Only the file boundary is new.
+
+Two things are worth carrying forward from it:
+
+- **A parser swap has to be proved on the parser that will run it.** The unit tests moved to jsdom,
+  but jsdom is not Chromium. Both implementations were run over the same inputs — the five committed
+  `get_text` fragments, both extraction outputs, and a set of shapes chosen to stress a parser — and
+  compared byte for byte: 17 of 19 identical. The two that differed were a `<tbody>` Chromium
+  inserts per spec and `&nbsp;` where linkedom writes `&#160;`; feeding both forms to a browser
+  showed identical DOM, text and codepoints, so the difference disappears at the moment the string
+  reaches the DOM, which is the only place it is going. The first attempt also compared the wrong
+  thing — whole fixture pages, which `removeFurniture` never receives — and "differs" was the right
+  answer to a question production never asks.
+- **Nothing failed, and that is why it needs a test rather than a comment.** The app worked, the
+  suite passed, and the only symptom was one line in a log. `test/client-bundle.test.ts` walks the
+  import graph from `main.tsx` and fails, naming the path, if a server-only package becomes
+  reachable again. Its first run failed on a sentence in a doc comment that quoted the very import
+  it exists to prevent — `module-resolution.test.ts` had the same flaw latent in it — so both now
+  strip comments before matching. A scanner that reads prose as code makes documenting a rule break
+  the rule.
+
 ---
 
 ## Open questions
