@@ -1022,6 +1022,48 @@ page — which is what a reader actually does — is what fires the event. Both 
 are now `networkMode: 'always'`, which is not a workaround but an accurate description of what they
 depend on: IndexedDB.
 
+### The opening paragraph a publisher never gets to keep
+
+First real use turned up an article missing its first paragraph. Not truncated, not
+paywalled — extraction reported "looks complete" and the piece simply started at its
+second sentence.
+
+The cause is structural rather than per-site. Readability returns the container with the
+highest density of paragraphs, and a standfirst is routinely one `<h2>` in an `<hgroup>`
+beside the body — headline, standfirst, byline, date — where it scores nothing, because
+headings are discounted and there is only one block of prose in the group. So it is
+dropped on every article that publisher runs, and nothing about the output looks wrong.
+
+`restoreMissingIntro` was supposed to cover this and could not: it compares against the
+bookmark's excerpt, which Instapaper often leaves empty, and it restores the excerpt
+rather than the paragraph. `findLede` recovers the real thing from the source page.
+
+The rule stays on the right side of **a signal, never a publisher**: it keys on the
+vocabulary newsroom CMSs use — `standfirst`, `intro`, `lede`, `lead`, `chapeau`, `perex`,
+`dek` — in `data-testid`, `class`, `id` or `itemprop`. A publisher that renames its
+classes stops being handled, which is a real cost; a hostname list would instead be
+silently wrong for every site not on it, which is a worse one.
+
+Four things the real page taught that a synthetic one would not have:
+
+- **Whole tokens, never substrings.** The Dutch `ontdek-meer` contains `dek` and
+  `leaderboard` contains `lead`. And the split has to handle camelCase, because the class
+  actually on the page is `story-intro_storyIntro__7SJ5Q` — a bundler hash whose only
+  meaningful half is glued to the rest.
+- **Order is load-bearing.** `Readability.parse` mutates the document it is handed, so the
+  `<hgroup>` is gone by the time it returns. Reading the standfirst afterwards finds
+  nothing on every page, and looks exactly like a publisher that has none.
+- **`textContent` is the wrong accessor.** The standfirst opened with a dateline in its own
+  element, and `textContent` concatenated them into `BRUSSELAnderlecht`. Replacing tags
+  with spaces first is what keeps the word break the page shows.
+- **The duplicate is worse than the omission.** Plenty of publishers put the standfirst
+  inside the body, where Readability keeps it; prepending there prints the opening
+  paragraph twice, which reads like the publisher repeating itself rather than like our
+  bug. `restoreLede` compares normalised words before inserting anything.
+
+Verified against the page that prompted it — 5,266 → 5,667 characters, opening restored —
+and against every committed fixture, which are unchanged, since none carries the markup.
+
 ### The store had a shape the design had not allowed for
 
 The first deployment to actually attach a store attached Redis Cloud, and Settings said no

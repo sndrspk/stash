@@ -223,6 +223,150 @@ function toHero(image: Element): HeroImage {
   return { src: image.getAttribute('src') ?? '', alt: image.getAttribute('alt') ?? '' };
 }
 
+/**
+ * Words a publisher uses to mark the standfirst — the paragraph between the headline
+ * and the body, set larger, that summarises the piece.
+ *
+ * A signal, never a publisher: these are the vocabulary of newsroom CMSs, not a list of
+ * sites. `standfirst` is British, `dek` American, `chapeau` French and Dutch, `perex`
+ * Czech and Slovak, `lead`/`lede` and `intro` international. A site not on this list
+ * that uses one of these words is handled; a site on it that renames its classes stops
+ * being handled, which is the failure mode a domain list does not have — and is exactly
+ * why the domain list is still the wrong trade. This one is wrong quietly and rarely;
+ * a hostname list is wrong silently for every site that is not on it.
+ */
+export const LEDE_MARKERS: readonly string[] = [
+  'standfirst',
+  'intro',
+  'lede',
+  'lead',
+  'chapeau',
+  'perex',
+  'dek',
+];
+
+/** Longest a standfirst can be. Past this it is the article, not a summary of it. */
+export const MAX_LEDE_CHARS = 1500;
+
+/** And shortest. Below this it is a label — "Analysis", "5 min read" — not prose. */
+export const MIN_LEDE_CHARS = 40;
+
+/** Above this share of linked text, the block is navigation dressed as prose. */
+export const MAX_LEDE_LINK_DENSITY = 0.25;
+
+/**
+ * The identifying words in an attribute, as whole tokens.
+ *
+ * Substring matching cannot be used here and the reason is worth recording: the Dutch
+ * `ontdek-meer` ("discover more") contains `dek`, and `leaderboard` contains `lead`. A
+ * CSS-module class arrives as `story-intro_storyIntro__7SJ5Q`, so the split has to
+ * handle camelCase as well as separators — `storyIntro` must yield `intro` or the
+ * hashed half of every modern class name is invisible to this.
+ */
+function attributeTokens(value: string): Set<string> {
+  return new Set(
+    value
+      .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+      .split(/[^A-Za-z]+/)
+      .filter(Boolean)
+      .map((token) => token.toLowerCase()),
+  );
+}
+
+/**
+ * The text, with element boundaries treated as spaces.
+ *
+ * Not `textContent`, and the difference is visible in the reading view rather than
+ * theoretical: a standfirst routinely opens with a dateline in its own element —
+ * `<span>BRUSSEL</span>Anderlecht moet…` — and `textContent` concatenates the two into
+ * `BRUSSELAnderlecht`. `plainText` replaces each tag with a space before collapsing
+ * runs, so the boundary survives as the word break it looks like on the page.
+ */
+function visibleText(element: Element): string {
+  return plainText(element.innerHTML);
+}
+
+function linkDensity(element: Element): number {
+  const total = visibleText(element).length;
+  if (total === 0) return 1;
+  let linked = 0;
+  for (const anchor of element.querySelectorAll('a')) linked += visibleText(anchor).length;
+  return linked / total;
+}
+
+/**
+ * The article's standfirst, from the *source page*, or nothing.
+ *
+ * Why this exists at all: Readability finds the container with the highest density of
+ * paragraphs and returns that. A standfirst is routinely a single `<h2>` in a
+ * `<hgroup>` beside the body rather than inside it — headline, standfirst, byline, date
+ * — and that group scores nothing, because Readability discounts headings and there is
+ * only one block of prose in it. So the opening paragraph of the article is dropped,
+ * every time, on every article that publisher runs, and the extraction otherwise looks
+ * perfect.
+ *
+ * This is deliberately not one of the fragment cleaners. It needs the page as fetched,
+ * and it must run **before** `Readability.parse`, which mutates the document it is
+ * given — by the time there is a fragment to clean, the standfirst has been stripped
+ * from the DOM it would have been recovered from.
+ *
+ * Returns plain text rather than markup, for the same reason `restoreMissingIntro`
+ * does: what comes back is prose being restored, not a publisher's heading markup being
+ * merged into the reading view.
+ */
+export function findLede(document: Document): string | null {
+  const scope = document.querySelector('article, main') ?? document.body;
+  if (scope === null) return null;
+
+  for (const element of scope.querySelectorAll('[data-testid], [class], [id], [itemprop]')) {
+    const attributes = [
+      element.getAttribute('data-testid') ?? '',
+      element.getAttribute('class') ?? '',
+      element.getAttribute('id') ?? '',
+      element.getAttribute('itemprop') ?? '',
+    ].join(' ');
+
+    const tokens = attributeTokens(attributes);
+    if (!LEDE_MARKERS.some((marker) => tokens.has(marker))) continue;
+
+    const text = visibleText(element);
+    if (text.length < MIN_LEDE_CHARS || text.length > MAX_LEDE_CHARS) continue;
+    if (linkDensity(element) > MAX_LEDE_LINK_DENSITY) continue;
+
+    // First match in document order, and only the first: a page with two of these has
+    // a standfirst and something else, and the standfirst is the one at the top.
+    return text;
+  }
+
+  return null;
+}
+
+/**
+ * Put the standfirst back, unless the extraction already has it.
+ *
+ * The guard is the whole of it. Plenty of publishers mark up a standfirst *inside* the
+ * body, where Readability keeps it — prepending there would print the article's opening
+ * paragraph twice, which is a worse outcome than the bug this fixes and a good deal
+ * harder to notice in testing, because it looks like the publisher's own repetition.
+ *
+ * Compared on normalised words rather than on the string, since Readability rewrites
+ * whitespace and entities on its way out.
+ */
+export function restoreLede(fragment: string, lede: string | null): string {
+  if (lede === null || lede.trim() === '') return fragment;
+
+  const wanted = normalizeTitle(lede);
+  if (wanted === '') return fragment;
+
+  // The opening of the extraction, generously bounded: a standfirst that survived is at
+  // the top of it, and searching the whole article would match a later restatement.
+  const opening = normalizeTitle(plainText(fragment).slice(0, Math.max(2000, lede.length * 4)));
+  const probe = wanted.slice(0, 80);
+  if (probe !== '' && opening.includes(probe)) return fragment;
+
+  return `<p>${escapeText(lede)}</p>${fragment}`;
+}
+
 export interface CleanOptions {
   title?: string;
   excerpt?: string;
