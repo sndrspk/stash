@@ -15,7 +15,17 @@
   --paper-sunken: #f1ede5;
   --ink: #12100e;
   --ink-muted: #56504a;
-  --ink-faint: #8b8379;
+  /*
+   * Darkened from #8b8379, which failed WCAG AA on every paper.
+   *
+   * `--ink-faint` carries the dateline, the byline, the crumb and the provenance
+   * line, all set at 12px, where AA asks for 4.5:1. The old value managed 3.52 on
+   * the default beige and 2.99 on sunken lilac. It is chosen against the worst
+   * surface rather than the default one — the five papers move `--paper` while the
+   * ink stays put, so a value that passes on beige can still fail on lilac, and the
+   * audit that found this only ever looked at beige.
+   */
+  --ink-faint: #6b645b;
   --rule: #e0dad0;
   --accent: #8c2f19;
   --accent-hover: #a83a20;
@@ -123,7 +133,7 @@
     --paper-sunken: #0b0a09;
     --ink: #eae5dc;
     --ink-muted: #a49c91;
-    --ink-faint: #6f675e;
+    --ink-faint: #8f867b;
     --rule: #2c2823;
     --accent: #e0714f;
     --accent-hover: #ef8564;
@@ -139,7 +149,7 @@
   --paper-sunken: #0b0a09;
   --ink: #eae5dc;
   --ink-muted: #a49c91;
-  --ink-faint: #6f675e;
+  --ink-faint: #8f867b;
   --rule: #2c2823;
   --accent: #e0714f;
   --accent-hover: #ef8564;
