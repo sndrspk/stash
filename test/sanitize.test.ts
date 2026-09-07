@@ -5,7 +5,7 @@
 // environment would assert nothing while appearing to pass.
 import { describe, expect, it } from 'vitest';
 
-import { sanitizeArticle } from '../src/lib/sanitize';
+import { externalHref, sanitizeArticle } from '../src/lib/sanitize';
 
 const clean = (html: string) => sanitizeArticle(html).toLowerCase();
 
@@ -164,5 +164,35 @@ describe('degenerate input', () => {
 
   it('does not throw on markup that is not a document', () => {
     expect(() => sanitizeArticle('<<<p>unclosed')).not.toThrow();
+  });
+});
+
+/*
+ * A bookmark's URL becomes an href the app renders itself, and that path never goes
+ * through DOMPurify — React escapes text but renders a `javascript:` href without
+ * complaint. The URL comes from Instapaper, so this is a third-party value.
+ */
+describe('externalHref', () => {
+  it('passes an ordinary article URL through', () => {
+    expect(externalHref('https://www.nrc.nl/nieuws/2026/01/01/iets')).toBe(
+      'https://www.nrc.nl/nieuws/2026/01/01/iets',
+    );
+    expect(externalHref('  http://example.com/a  ')).toBe('http://example.com/a');
+  });
+
+  it('refuses a scheme that executes', () => {
+    expect(externalHref('javascript:alert(1)')).toBeNull();
+    expect(externalHref('JaVaScRiPt:alert(1)')).toBeNull();
+    expect(externalHref('data:text/html,<script>alert(1)</script>')).toBeNull();
+    expect(externalHref('vbscript:msgbox')).toBeNull();
+  });
+
+  it('refuses a relative URL, which would point back into the app', () => {
+    // Stricter than the in-article policy on purpose: `/settings` here would send a
+    // reader to a page of ours while claiming to be the publisher's.
+    expect(externalHref('/nieuws/2026/01/01/iets')).toBeNull();
+    expect(externalHref('//evil.example/x')).toBeNull();
+    expect(externalHref('')).toBeNull();
+    expect(externalHref('   ')).toBeNull();
   });
 });

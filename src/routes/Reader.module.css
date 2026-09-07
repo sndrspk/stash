@@ -450,3 +450,29 @@
   font-size: var(--text-sm);
   color: var(--ink-faint);
 }
+
+/*
+ * The origin link and the provenance label share the byline's line.
+ *
+ * The link is underlined rather than coloured: the byline is set in small caps at
+ * 0.7em, where the accent colour reads as decoration rather than as a link, and an
+ * underline survives both themes and a reader who has turned the paper dark.
+ */
+.origin {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.origin:hover {
+  color: var(--accent);
+}
+
+/*
+ * Dimmer than the host it follows. Which source produced the text matters when you go
+ * looking for it and never otherwise, so it earns a place on the line but not the eye.
+ */
+.provenance {
+  color: var(--ink-faint);
+  opacity: 0.75;
+}

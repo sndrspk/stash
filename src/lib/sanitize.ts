@@ -207,3 +207,28 @@ function enforceUrlPolicy(node: Element): void {
     node.setAttribute('rel', 'noopener noreferrer');
   }
 }
+
+/**
+ * A bookmark's own URL, as an `href` the reading view can render, or null.
+ *
+ * Stricter than `SAFE_URL` above, and deliberately so: that one governs links *inside*
+ * an article, where a root-relative `/x` or a protocol-relative `//host/x` is ordinary
+ * and gets resolved against the publisher's own base. This one produces a link the app
+ * renders itself, pointing away from the app, so only an absolute `http(s)` URL is
+ * meaningful — anything relative would resolve against the deployment and send the
+ * reader to a page of ours that does not exist.
+ *
+ * A URL arrives here from Instapaper, which is a third party, so `javascript:` is a
+ * real possibility rather than a theoretical one — and unlike article HTML, this value
+ * never passes through DOMPurify. React escapes text but will happily render a
+ * `javascript:` href.
+ */
+export function externalHref(url: string): string | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(url.trim());
+  } catch {
+    return null;
+  }
+  return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed.href : null;
+}
