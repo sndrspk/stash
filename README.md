@@ -10,9 +10,12 @@ not affiliated with or endorsed by Instapaper.
 own instance, connect it to your own Instapaper account, and it serves exactly you. If you want to
 use it, fork or clone this repo and deploy it yourself.
 
-> **Status: in progress.** The gate, the data layer, image resolution, the front page and the
-> reading view are built. What remains is the extraction fallback (Phase 7), offline polish
-> (Phase 8) and shipping (Phase 9). [`WORKPLAN.md`](WORKPLAN.md) is the running record.
+> **Status: built, and in use.** All nine phases are complete — the gate, the data layer, image
+> resolution, the front page, the reading view, the extraction fallback, offline support and the
+> ship checklist — and it has been read on an Android phone, a MacBook and a tablet in Safari. Two
+> things are still open rather than done: a Lighthouse pass against a real deployment, and one
+> confirmation that a pasted publisher session turns that publisher's stub into a full article.
+> [`WORKPLAN.md`](WORKPLAN.md) is the running record.
 
 ## Try the extraction probe
 
