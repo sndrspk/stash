@@ -77,12 +77,19 @@ Both are the same root seen from two ends, which is why neither has been fixed p
 
 ## Waiting on you to try it
 
-- [ ] **Does `STASH_USER_AGENT` actually clear the 403s?** Most paywalled publishers refuse
-      `Stash/0.1 (+repo)` before reading a cookie, which is why Extract mostly fails. Set the
-      variable to a browser string, redeploy, and try one — the diagnosis is well-supported by
-      the code and the probe's own hint, but this container cannot reach a publisher to test it,
-      so it is a hypothesis until your deployment says otherwise. Read the posture section of
-      [`docs/EXTRACTION.md`](docs/EXTRACTION.md) first; it is a decision, not a setting.
+- [ ] **Find out whether these publishers are reachable at all.** A browser `STASH_USER_AGENT`
+      did **not** clear the refusals: 403 on some, 405 on others, with the session sent. The
+      likeliest reading is that the User-Agent was necessary but not sufficient — we claim
+      Chrome and then send four headers, where a browser sends a dozen including `Sec-Fetch-*`
+      and `sec-ch-ua`. A Chrome UA without Chrome's headers is a *stronger* bot signal than an
+      honest one, so half the change may be worse than none.
+
+      **Iterate with the probe, not with deploys.** `npm run probe -- <url> --ua "<string>"`
+      hits the real publisher from your machine in one command. If nothing gets a 200 there,
+      nothing will get one from the deployment either, and the answer is that these publishers
+      are behind protection an HTML fetcher cannot pass — which `docs/EXTRACTION.md` already
+      lists as the ceiling. Tell me what you find and I will either add coherent browser
+      headers or write the ceiling down.
       → [WORKPLAN](WORKPLAN.md#the-honest-user-agent-is-the-reason-most-extractions-fail)
 
 ## Small and optional

@@ -60,6 +60,15 @@ export type ExtractOutcome =
        * and the likelier guess is the wrong one.
        */
       authenticated: boolean;
+      /**
+       * Where the request ended up, when the server said.
+       *
+       * A refusal at the URL we asked for and a refusal three redirects away are
+       * different problems, and the status code alone cannot tell them apart — a 405
+       * on an article is nonsense, a 405 on the consent endpoint it bounced to is
+       * ordinary. Null when unknown rather than guessed.
+       */
+      finalUrl: string | null;
     }
   | { kind: 'blocked'; tag: string };
 
@@ -100,7 +109,12 @@ async function requestExtract(url: string, excerpt: string): Promise<ExtractOutc
   // the reader's behalf, so no session was replayed and saying otherwise would be a
   // guess about a request that never happened.
   if (!response.ok) {
-    return { kind: 'failed', tag: `HTTP ${String(response.status)}`, authenticated: false };
+    return {
+      kind: 'failed',
+      tag: `HTTP ${String(response.status)}`,
+      authenticated: false,
+      finalUrl: null,
+    };
   }
 
   const body = (await response.json()) as {
@@ -110,12 +124,14 @@ async function requestExtract(url: string, excerpt: string): Promise<ExtractOutc
     truncated?: boolean;
     sessionExpired?: boolean;
     authenticated?: boolean;
+    url?: string;
   };
   if (body.ok !== true || typeof body.html !== 'string' || body.html.trim() === '') {
     return {
       kind: 'failed',
       tag: body.tag ?? 'Extraction returned nothing',
       authenticated: body.authenticated === true,
+      finalUrl: typeof body.url === 'string' ? body.url : null,
     };
   }
   return {

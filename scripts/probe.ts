@@ -15,6 +15,7 @@
  *   --file <path>       reduce a saved HTML file instead of fetching (no network)
  *   --out <file>        write the extracted article HTML for eyeballing
  *   --show <n>          print the first n characters of extracted text (default 300)
+ *   --ua <string>       User-Agent to send (default: STASH_USER_AGENT, else Stash/0.1)
  *
  * Cookie VALUES are never printed. Names only — the same rule the real app follows.
  */
@@ -37,6 +38,7 @@ const OFF = '[0m';
 
 interface Args {
   url: string;
+  userAgent: string | null;
   sessions: string | null;
   anonOnly: boolean;
   authOnly: boolean;
@@ -48,6 +50,7 @@ interface Args {
 function parseArgs(argv: string[]): Args {
   const args: Args = {
     url: '',
+    userAgent: null,
     sessions: null,
     anonOnly: false,
     authOnly: false,
@@ -57,7 +60,8 @@ function parseArgs(argv: string[]): Args {
   };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
-    if (arg === '--sessions') args.sessions = argv[++i] ?? args.sessions;
+    if (arg === '--ua') args.userAgent = argv[++i] ?? args.userAgent;
+    else if (arg === '--sessions') args.sessions = argv[++i] ?? args.sessions;
     else if (arg === '--file') args.file = argv[++i] ?? null;
     else if (arg === '--out') args.out = argv[++i] ?? null;
     else if (arg === '--show') args.show = Number(argv[++i] ?? args.show);
@@ -89,6 +93,18 @@ function report(label: string, result: ExtractResult): void {
   );
   if (result.redirects > 0)
     console.log(`${' '.repeat(20)}${DIM}${result.redirects} redirect(s) → ${result.url}${OFF}`);
+}
+
+/** A refusal the publisher issued deliberately, rather than a transport failure. */
+/**
+ * The User-Agent for this run, if one was asked for.
+ *
+ * Present so a string can be tried against a live publisher without a deploy: a 403
+ * costs one command here and a redeploy there, and the difference decides whether
+ * anyone iterates at all.
+ */
+function userAgentOption(args: Args): { userAgent?: string } {
+  return args.userAgent === null ? {} : { userAgent: args.userAgent };
 }
 
 /** A refusal the publisher issued deliberately, rather than a transport failure. */
@@ -234,13 +250,13 @@ async function main(): Promise<number> {
   let auth: ExtractResult | null = null;
 
   if (!args.authOnly) {
-    anon = await extract(target.toString());
+    anon = await extract(target.toString(), userAgentOption(args));
     report('anonymous', anon);
   }
   if (!args.anonOnly && cookie !== null) {
     // Serial, with SanFeedBin's ~250ms courtesy delay between fetches.
     await new Promise((resolve) => setTimeout(resolve, 250));
-    auth = await extract(target.toString(), { cookie });
+    auth = await extract(target.toString(), { cookie, ...userAgentOption(args) });
     report('with session', auth);
   }
 

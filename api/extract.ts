@@ -93,6 +93,15 @@ export async function GET(request: Request): Promise<Response> {
      * something the client caches and shows, not something it retries at once.
      */
     return json(
+      /*
+       * `url` is where the request *ended*, not where it started.
+       *
+       * A 405 on an article URL makes no sense — we send GET, and articles answer
+       * GET. A 405 after two redirects onto a consent or paywall endpoint makes
+       * perfect sense, and the two are indistinguishable from a status code alone.
+       * The client compares it against the URL it asked for and only mentions it
+       * when they differ.
+       */
       { url: result.url, ok: false, tag: result.tag, authenticated: result.authenticated },
       200,
     );

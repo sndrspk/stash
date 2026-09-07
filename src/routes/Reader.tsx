@@ -240,7 +240,18 @@ export function Reader() {
       const how = outcome.authenticated
         ? ' Your session was sent, so this is the publisher refusing the request itself, not a session problem.'
         : ' No session was sent for this host — check Settings if you expected one.';
-      return { text: `The publisher's page could not be read: ${outcome.tag}.${how}` };
+      /*
+       * Only when it differs from the article's own URL, and then it is the most
+       * useful sentence on the screen: a refusal at the page we asked for is the
+       * publisher saying no, while a refusal somewhere else means we were sent there
+       * — a consent wall, a login, a regional gate — and the status code is about
+       * that page rather than about the article.
+       */
+      const landed =
+        outcome.finalUrl !== null && bookmark !== undefined && outcome.finalUrl !== bookmark.url
+          ? ` The request ended at ${outcome.finalUrl}, not at the article, so that is what refused it.`
+          : '';
+      return { text: `The publisher's page could not be read: ${outcome.tag}.${how}${landed}` };
     }
     if (!outcome.truncated) return null;
 
