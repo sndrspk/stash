@@ -7,6 +7,11 @@ design: no accounts, no shared backend, one deployment per reader.
 down. When a change alters behaviour someone would otherwise rediscover the hard way,
 it belongs there — the file is deliberately a narrative, not a checklist.
 
+[`TODO.md`](TODO.md) is the checklist, and it is an index rather than a second record:
+every item points at the `WORKPLAN.md` section that explains it. Finish something and
+delete its line there; the reasoning stays where it was written. Adding an item to one
+file and not the other is how the two start disagreeing.
+
 ## Branches and pull requests
 
 Work happens on the designated branch, one PR at a time, and **each PR is merged before

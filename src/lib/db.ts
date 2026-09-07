@@ -79,6 +79,18 @@ export interface ArticleTextRecord {
   html: string;
   fetched_at: number;
   purge_after: number | null;
+  /**
+   * Whether a publisher session was replayed to obtain this copy.
+   *
+   * Only ever set on an `extracted` row, and optional because rows written before it
+   * existed have no answer — which is why the reading view says nothing rather than
+   * saying "anonymously" about a fetch it cannot speak for. Absent is not false.
+   *
+   * Stored rather than kept in memory: the question it answers — did my session do
+   * the work? — is asked days later, by someone comparing our copy against the
+   * publisher's page, not in the second after the fetch.
+   */
+  authenticated?: boolean;
 }
 
 export const textKey = (bookmarkId: number, source: TextSource): string =>
