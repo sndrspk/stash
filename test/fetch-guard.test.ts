@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   BlockedUrlError,
+  USER_AGENT,
   addressBlocked,
   assertFetchable,
+  configuredUserAgent,
   isInstapaperHost,
 } from '../src/lib/fetch-guard.js';
 
@@ -121,5 +123,40 @@ describe('assertFetchable', () => {
     await expect(assertFetchable(new URL('http://no-such-host.invalid/'))).rejects.toBeInstanceOf(
       BlockedUrlError,
     );
+  });
+});
+
+/*
+ * The User-Agent a deployment sends.
+ *
+ * The honest default is what the repository ships and what the posture note in
+ * docs/EXTRACTION.md describes. The override exists because that default does not work
+ * everywhere: publishers behind bot protection answer 403 to anything not
+ * browser-shaped, before looking at a cookie — so a reader with a valid paid session is
+ * refused for the User-Agent alone. Opt-in per deployment, which is one person deciding
+ * how their own reading tool identifies itself rather than a change to what everyone
+ * who forks this sends.
+ */
+describe('configuredUserAgent', () => {
+  it('is the honest one by default', () => {
+    expect(configuredUserAgent({})).toBe(USER_AGENT);
+    expect(configuredUserAgent({})).toContain('Stash/');
+    expect(configuredUserAgent({})).toContain('github.com');
+  });
+
+  it('takes an override when a deployment sets one', () => {
+    const browser = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36';
+    expect(configuredUserAgent({ STASH_USER_AGENT: browser })).toBe(browser);
+  });
+
+  it('treats an empty or blank value as unset', () => {
+    // A variable added to a dashboard and left empty is a deployment mid-edit, not a
+    // request to send an empty User-Agent — which some servers refuse outright.
+    expect(configuredUserAgent({ STASH_USER_AGENT: '' })).toBe(USER_AGENT);
+    expect(configuredUserAgent({ STASH_USER_AGENT: '   ' })).toBe(USER_AGENT);
+  });
+
+  it('trims what it is given', () => {
+    expect(configuredUserAgent({ STASH_USER_AGENT: '  Mozilla/5.0  ' })).toBe('Mozilla/5.0');
   });
 });

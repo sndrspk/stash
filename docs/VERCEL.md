@@ -141,6 +141,7 @@ credentials.
 | `KV_REST_API_URL` / `KV_REST_API_TOKEN` | Settings says no store is attached; sessions cannot be saved. Injected automatically when you attach a KV store to the project — `UPSTASH_REDIS_REST_URL` / `_TOKEN` work too, and `STASH_KV_URL` / `STASH_KV_TOKEN` override both. |
 | `REDIS_URL` | The other way in, for managed Redis with no HTTP endpoint. `KV_URL` and `UPSTASH_REDIS_URL` work too, and `STASH_REDIS_URL` overrides them. Only consulted when no HTTP pair is set. |
 | `STASH_ENCRYPTION_KEY` | With a store attached, saving a session answers 503 rather than writing plaintext. Generate one with `openssl rand -base64 32`. |
+| `STASH_USER_AGENT` | The extractor introduces itself as `Stash/0.1 (+repo)`, which most paywalled publishers refuse with 403 before reading a cookie. Setting a browser string gets past that — read the posture section of [`docs/EXTRACTION.md`](EXTRACTION.md) first, because it is a decision about how your reading tool presents itself, not a setting. |
 
 **Either transport works, and you only need one.** Providers hand out two different
 things for the same store: an HTTPS endpoint with a bearer token, and a `redis://`
