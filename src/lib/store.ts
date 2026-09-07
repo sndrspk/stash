@@ -233,6 +233,8 @@ export async function readBestText(id: number): Promise<ArticleTextRecord | unde
 export interface TextSources {
   instapaper: string | null;
   extracted: string | null;
+  /** Whether a session was replayed for the extracted copy; undefined when unrecorded. */
+  extractedAuthenticated?: boolean;
 }
 
 /**
@@ -248,7 +250,11 @@ export async function readTextSources(id: number): Promise<TextSources> {
     const html = rows.find((row) => row.source === source)?.html ?? '';
     return html.trim() === '' ? null : html;
   };
-  return { instapaper: pick('instapaper'), extracted: pick('extracted') };
+  return {
+    instapaper: pick('instapaper'),
+    extracted: pick('extracted'),
+    extractedAuthenticated: rows.find((row) => row.source === 'extracted')?.authenticated,
+  };
 }
 
 /**
@@ -280,6 +286,7 @@ export async function writeText(
   source: TextSource,
   html: string,
   now = Date.now(),
+  authenticated?: boolean,
 ): Promise<void> {
   // Store beside, never over: writing the extracted copy must not destroy what
   // Instapaper returned, so the key includes the source.
@@ -292,6 +299,9 @@ export async function writeText(
     html,
     fetched_at: now,
     purge_after: null,
+    // Written only when the caller knows. `undefined` means "no answer recorded",
+    // which is what every row stored before this field existed carries.
+    ...(authenticated === undefined ? {} : { authenticated }),
   });
 }
 

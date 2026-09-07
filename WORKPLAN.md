@@ -1053,6 +1053,50 @@ page — which is what a reader actually does — is what fires the event. Both 
 are now `networkMode: 'always'`, which is not a workaround but an accurate description of what they
 depend on: IndexedDB.
 
+### Two questions the interface could not answer
+
+Confirming that a publisher session does anything turned out to be impossible from the
+app, and finding that out took asking a reader to do it.
+
+**"Extracted by Stash" was not the claim anyone needed.** Plenty of soft paywalls yield to
+an anonymous fetch, so an extraction that succeeded says nothing about whether the session
+someone pasted did the work — and that is precisely the question they have when deciding
+whether pasting one was worth two minutes at a desktop. The server has always known:
+`api/extract` returns `authenticated`, and the expired-session diagnostic already used it.
+It was simply never carried to the success path. It is now stored beside the extracted
+text, because the question gets asked days later, comparing our copy against the
+publisher's page, not in the second after the fetch. Absent stays absent: a row written
+before the field existed says "Extracted by Stash" and nothing more, since claiming
+"anonymously" about a fetch we cannot speak for would be a confident lie built on a
+missing value.
+
+**And there was no second fetch to be had.** "Clearing that session returns it to a stub"
+is half of Phase 7b's own "done when", and it needs the article fetched again after signing
+out. The only control that fetches is gated on `needsExtraction`, which is false for
+anything already reading as complete — so after a successful extraction the button was
+gone, and with it any way to perform the test. The same gap is why an improved extractor
+never reached anything already cached.
+
+One control now carries both meanings: **Full text** when what is on screen is a stub,
+**Re-extract** when an extraction is stored. Both pass `force`, which is the whole
+distinction from the automatic pass — a press is a decision, so it skips the heuristic, the
+backoff and the already-extracted gate. One control rather than two because the phone bar
+had no room for a seventh, and because they are never both the right thing to offer.
+
+Two things worth carrying:
+
+- **A checkbox can describe work that cannot be done.** "Confirm a pasted session turns a
+  stub into a full article" sat in the plan reading like a two-minute job, through several
+  reviews, while the interface offered no way to do it. It survived because it was written
+  from the design rather than from an attempt. The reader who tried it found the gap in one
+  message.
+- **The identifier a reader reaches for is the one the screen shows.** Asked to find an
+  article needing this test, the obvious move was to look for "Text from Instapaper" — which
+  is the normal state of almost every article, and says nothing about whether anything is
+  wrong. Extraction also runs automatically on a stub, so the button that was supposed to
+  mark the case is usually gone before anyone sees it. A state worth acting on has to be
+  named on screen, not inferred from the absence of something else.
+
 ### The audit could only see one of ten sheets
 
 The accessibility half of the Lighthouse pass found one thing, and finding it was worth more
@@ -1262,12 +1306,12 @@ product decisions and two questions that first real use put on the table.
    than a task: `findLede` needs the *source page*, which `get_text` output is not, so that one
    cannot simply be moved; and applying the others to stored text needs a re-sync or a migration to
    reach anything already cached.
-3. **How does a cached extraction pick up an improved extractor?** It does not, today. Every fix to
-   the extraction path is invisible on articles already in the cache, and nothing in the interface
-   can force a re-run: the "Full text" button is gated on `needsExtraction`, false for anything that
-   already reads as complete. A "re-extract this article" affordance is the small answer; a stored
-   extractor version that invalidates on change is the thorough one. Neither is worth building until
-   the shape of question 2 is settled, since they solve the same problem from opposite ends.
+3. ~~**How does a cached extraction pick up an improved extractor?**~~ **Half answered.** The
+   small version is built: **Re-extract** appears whenever an extraction is stored, so one article
+   can be refetched against an improved extractor. The thorough version — a stored extractor
+   version that invalidates every cached extraction when the rules change — is not, and its cost
+   depends on how often those rules actually change, which a few weeks of use will say better than
+   an argument will.
 4. **Does a large queue need a browsable index?** Raised by Phase 5. The front page shows fourteen
    articles: four in image slots and ten in the sidebar lists. That is deliberate and it is what a
    front page is — but on a queue of fifty it means thirty-six unread articles are on no screen in

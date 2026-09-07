@@ -97,7 +97,29 @@ export function Reader() {
    * without complaint.
    */
   const usingExtraction = sources?.extracted != null && !showOriginal;
-  const provenance = usingExtraction ? 'Extracted by Stash' : 'Text from Instapaper';
+  /*
+   * "Extracted by Stash" alone could not answer the question it was added for.
+   *
+   * Plenty of soft paywalls yield to an anonymous fetch, so an extraction that
+   * succeeded says nothing about whether the reader's session did the work — and
+   * "did my session do the work?" is exactly what someone asks when deciding whether
+   * pasting one was worth it. The server is the only party that knows, since it is
+   * the only one that sees the jar; `authenticated` is its answer, stored beside the
+   * text so the question can be asked days later rather than only in the second
+   * after the fetch.
+   *
+   * Silent when unrecorded. Rows written before the field existed have no answer,
+   * and saying "anonymously" about a fetch we cannot speak for would be a confident
+   * claim built on an absent value.
+   */
+  const withSession = sources?.extractedAuthenticated;
+  const provenance = usingExtraction
+    ? withSession === undefined
+      ? 'Extracted by Stash'
+      : withSession
+        ? 'Extracted by Stash, with your session'
+        : 'Extracted by Stash, anonymously'
+    : 'Text from Instapaper';
   const origin = bookmark === undefined ? null : externalHref(bookmark.url);
   const clean = useMemo(
     () => (shown === undefined ? '' : sanitizeArticle(removeFurniture(shown))),
@@ -373,15 +395,36 @@ export function Reader() {
               />
             )}
           </div>
-          {canExtract && (
+          {/*
+            One control, two meanings, because the bar has no room for a seventh and
+            they are never both the right thing to offer.
+
+            "Full text" when what is on screen is a stub: the offer to go and get the
+            article. "Re-extract" when an extraction is already stored: the offer to
+            fetch it again, which had no way of being asked before. That gap was not
+            cosmetic — the only way to confirm a publisher session does anything is to
+            sign out of it and fetch the same article again, and with the button
+            hidden behind `needsExtraction` there was no second fetch to be had. It is
+            also how an article picks up an improved extractor, which otherwise never
+            reaches anything already cached.
+
+            Both pass `force`, which is the whole distinction from the automatic pass
+            above: a press is a decision, so it skips the heuristic, the backoff and
+            the already-extracted gate.
+          */}
+          {(canExtract || sources?.extracted != null) && (
             <button
               type="button"
               className={styles.action}
               disabled={extract.isPending}
               onClick={() => runExtract(true)}
-              title="Fetch the full article from the publisher"
+              title={
+                canExtract
+                  ? 'Fetch the full article from the publisher'
+                  : 'Fetch it from the publisher again, replacing the stored copy'
+              }
             >
-              {extract.isPending ? 'Fetching…' : 'Full text'}
+              {extract.isPending ? 'Fetching…' : canExtract ? 'Full text' : 'Re-extract'}
             </button>
           )}
           <button

@@ -19,7 +19,14 @@ something already built.
 - [ ] **Confirm a pasted session turns a stub into a full article.** Phase 7b's actual "done
       when". The store works and sessions are in it; this specific claim — that replaying one
       makes a paywalled article arrive complete — has never been checked end to end on the
-      deployment. One article from a publisher you subscribe to answers it.
+      deployment.
+
+      **Now performable, which it was not before.** Open an article showing
+      `EXTRACTED BY STASH, WITH YOUR SESSION` — that line is the confirmation, and it comes
+      from the server rather than from inference. For the second half of the "done when",
+      sign out of that publisher and press **Re-extract**: it should come back a stub.
+      Neither the wording nor the button existed until now, which is why this item sat here
+      looking like a two-minute job.
       → [Phase 7b](WORKPLAN.md#7b--manual-site-sessions)
 - [ ] **Install to the home screen on iOS, and open it offline there.** Phase 8's "done when".
       Running smoothly on an iPad in Safari is not the same claim as installing and cold-starting
@@ -40,11 +47,13 @@ Both are the same root seen from two ends, which is why neither has been fixed p
       paragraph. Obstacles: `findLede` needs the *source page*, which `get_text` output is not;
       and reaching already-cached text needs a re-sync or a migration.
       → [Open questions](WORKPLAN.md#open-questions)
-- [ ] **A cached extraction never picks up an improved extractor.** Every extraction fix is
-      invisible on articles already stored, and nothing in the interface can force a re-run — the
-      "Full text" button is gated on `needsExtraction`, false for anything that already reads as
-      complete. Small answer: a "re-extract this article" control. Thorough answer: a stored
-      extractor version that invalidates on change. → [Open questions](WORKPLAN.md#open-questions)
+- [x] ~~**A cached extraction never picks up an improved extractor.**~~ **Answered for one
+      article at a time.** The reading view now offers **Re-extract** whenever an extraction is
+      stored, not only when what is on screen still looks like a stub, so an article can be
+      refetched against an improved extractor. What is *not* done is doing it in bulk: there is
+      still no stored extractor version that would invalidate every cached extraction when the
+      rules change. Whether that is worth building depends on how often the rules change, which
+      is not yet known. → [Open questions](WORKPLAN.md#open-questions)
 
 ## Product decisions, worth making from use rather than now
 

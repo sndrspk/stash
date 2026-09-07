@@ -49,6 +49,7 @@ function recording(
     html: FULL,
     truncated: false,
     sessionExpired: false,
+    authenticated: false,
   },
 ) {
   const asked: string[] = [];
@@ -288,7 +289,13 @@ describe('single-flight', () => {
     const fetchExtract = async (url: string): Promise<ExtractOutcome> => {
       asked.push(url);
       await gate;
-      return { kind: 'extracted', html: FULL, truncated: false, sessionExpired: false };
+      return {
+        kind: 'extracted',
+        html: FULL,
+        truncated: false,
+        sessionExpired: false,
+        authenticated: false,
+      };
     };
 
     // No await between the two calls: the lock is taken synchronously, before any

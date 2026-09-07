@@ -43,6 +43,8 @@ export type ExtractOutcome =
        * becomes a sentence and a re-paste link, never an automatic sign-out.
        */
       sessionExpired: boolean;
+      /** Whether a stored publisher session was replayed for this fetch. */
+      authenticated: boolean;
     }
   | { kind: 'failed'; tag: string }
   | { kind: 'blocked'; tag: string };
@@ -88,6 +90,7 @@ async function requestExtract(url: string, excerpt: string): Promise<ExtractOutc
     tag?: string;
     truncated?: boolean;
     sessionExpired?: boolean;
+    authenticated?: boolean;
   };
   if (body.ok !== true || typeof body.html !== 'string' || body.html.trim() === '') {
     return { kind: 'failed', tag: body.tag ?? 'Extraction returned nothing' };
@@ -97,6 +100,7 @@ async function requestExtract(url: string, excerpt: string): Promise<ExtractOutc
     html: body.html,
     truncated: body.truncated === true,
     sessionExpired: body.sessionExpired === true,
+    authenticated: body.authenticated === true,
   };
 }
 
@@ -168,7 +172,7 @@ export async function extractArticle(
     if (outcome.kind === 'extracted') {
       // Beside, never over: the Instapaper row is untouched, which is what makes
       // "show original" free and a bad extraction non-destructive.
-      await writeText(id, 'extracted', outcome.html, now());
+      await writeText(id, 'extracted', outcome.html, now(), outcome.authenticated);
     } else {
       // The empty row *is* the record of the failure, and the start of the week.
       await writeText(id, 'extracted', '', now());

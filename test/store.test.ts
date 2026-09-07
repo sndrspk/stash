@@ -14,6 +14,7 @@ import {
   restore,
   unmarkPurge,
   writeImage,
+  readTextSources,
   writeText,
   applySync,
 } from '../src/lib/store';
@@ -220,6 +221,38 @@ describe('article text', () => {
 
   it('returns undefined when there is nothing', async () => {
     expect(await readBestText(999)).toBeUndefined();
+  });
+
+  /*
+   * Whether a session was replayed is stored, not merely reported once.
+   *
+   * "Extracted by Stash" cannot answer the question a reader actually has — plenty of
+   * soft paywalls yield anonymously, so a successful extraction says nothing about
+   * whether the session they pasted did any work. And the question gets asked days
+   * later, comparing our copy against the publisher's page, not in the second after
+   * the fetch.
+   */
+  it('records whether a session was replayed', async () => {
+    await writeText(1, 'extracted', '<p>full</p>', NOW, true);
+    expect((await readTextSources(1)).extractedAuthenticated).toBe(true);
+
+    await writeText(2, 'extracted', '<p>full</p>', NOW, false);
+    expect((await readTextSources(2)).extractedAuthenticated).toBe(false);
+  });
+
+  it('says nothing about a row written before the field existed', async () => {
+    // Absent is not false. Saying "anonymously" about a fetch we cannot speak for
+    // would be a confident claim built on a missing value.
+    await writeText(3, 'extracted', '<p>full</p>', NOW);
+    expect((await readTextSources(3)).extractedAuthenticated).toBeUndefined();
+  });
+
+  it('reads the flag from the extracted row, never the Instapaper one', async () => {
+    // It is meaningless on the Instapaper row — that text was fetched by Instapaper,
+    // not by us — so the accessor must not pick it up even if something writes one.
+    await writeText(4, 'instapaper', '<p>stub</p>', NOW, true);
+    await writeText(4, 'extracted', '<p>full</p>', NOW, false);
+    expect((await readTextSources(4)).extractedAuthenticated).toBe(false);
   });
 });
 

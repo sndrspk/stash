@@ -164,6 +164,23 @@ specific one wins where both match — then **Sign out** of the `www` one.
 
 ## Step 4 — Check that it worked
 
+### In the app
+
+Open one of that publisher's articles that Instapaper serves as a stub. Extraction runs on its own
+when it sees one, so there is usually nothing to press. The line under the headline is the answer:
+
+> NIEUWSBLAD.BE · **EXTRACTED BY STASH, WITH YOUR SESSION**
+
+That wording comes from the server, which is the only party that sees the cookie jar. "Extracted by
+Stash, **anonymously**" means the page came back complete without your session — which happens with
+soft paywalls, and means the session bought you nothing for that article. Plain "Extracted by Stash"
+means the copy predates this being recorded; re-extract it to find out.
+
+To prove the session is doing the work, sign out of that publisher in **Settings → Publisher
+sessions** and press **Re-extract** on the same article. It should come back a stub.
+
+### With the probe
+
 Point the probe at an article from that publisher — ideally one you know is paywalled:
 
 ```bash
