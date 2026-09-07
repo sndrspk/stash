@@ -73,13 +73,21 @@ Developer tools are hidden by default:
 
 ### In the app
 
-Open **Settings → Publisher sessions**, put the publisher in the first box — `www.ft.com`, or the
-whole article URL, which is easier since it is already on your clipboard — paste the header into the
+Open **Settings → Publisher sessions**, put the publisher in the first box — `ft.com`, or the whole
+article URL, which is easier since it is already on your clipboard — paste the header into the
 second, and press **Save session**.
+
+Pasting the article URL gives you the `www` host, which covers less than the apex does (see
+[Which host to use](#which-host-to-use)). The screen notices and offers the wider one:
+
+> **Use ft.com instead** — it covers www.ft.com and any other subdomain, where www.ft.com covers
+> only itself.
+
+It is a suggestion, not a correction: press it or ignore it, and what you typed is what gets stored.
 
 It answers with the cookie *names* it stored and nothing else:
 
-> Stored 26 cookies for www.nieuwsblad.be.
+> Stored 26 cookies for nieuwsblad.be.
 
 The list below then shows that publisher, its cookie names, and how long ago you pasted it. **Sign
 out** forgets one. There is no way to read a value back out, from the screen or from the API — the
@@ -96,7 +104,7 @@ do the same thing.
 **Paste at a prompt** (simplest):
 
 ```bash
-npm run session -- add www.nieuwsblad.be
+npm run session -- add nieuwsblad.be
 ```
 
 It waits, you paste, you press **Enter**. That's it — no Ctrl-D.
@@ -104,36 +112,55 @@ It waits, you paste, you press **Enter**. That's it — no Ctrl-D.
 **From the clipboard**, if you haven't copied anything else since Step 2:
 
 ```bash
-pbpaste | npm run session -- add www.nieuwsblad.be                  # macOS
-xclip -o -selection clipboard | npm run session -- add www.nieuwsblad.be   # Linux
+pbpaste | npm run session -- add nieuwsblad.be                  # macOS
+xclip -o -selection clipboard | npm run session -- add nieuwsblad.be   # Linux
 ```
 
 **From a file**, if pasting several hundred characters into a terminal misbehaves:
 
 ```bash
-npm run session -- add www.nieuwsblad.be --from header.txt
+npm run session -- add nieuwsblad.be --from header.txt
 ```
 
 You can also pass the article URL instead of the host — `npm run session -- add
-https://www.nieuwsblad.be/cnt/whatever` works, and takes the host from it.
+https://www.nieuwsblad.be/cnt/whatever` works, and takes the host from it. Note that it takes the
+host *as written*, `www` included: the command line has no equivalent of the settings screen's
+suggestion, so drop the `www` yourself.
 
 The header is never accepted as a command-line argument, so it stays out of your shell history.
 
 On success you get back the cookie **names** and nothing else:
 
 ```
-Stored 26 cookies for www.nieuwsblad.be in sessions.txt.
+Stored 26 cookies for nieuwsblad.be in sessions.txt.
 _pcid, didomi_token, cf_clearance, auth_coral_sso_token, ...
 ```
 
 ### Which host to use
 
-Use the host as it appears in the address bar — `www.nieuwsblad.be`, not `nieuwsblad.be`, if that's
-what the URL says.
+**Leave the `www.` off.** `nieuwsblad.be`, not `www.nieuwsblad.be`.
 
-A session saved for `nieuwsblad.be` is also sent to `www.nieuwsblad.be` and `sport.nieuwsblad.be`.
-One saved for `www.nieuwsblad.be` is sent only to that exact host. When in doubt, use what the
-address bar shows: it is the host your cookies actually came from.
+A session saved for host H is sent to a request for U when U is H, or when U ends with `.H`. So:
+
+| saved as | `www.nieuwsblad.be` | `nieuwsblad.be` | `sport.nieuwsblad.be` |
+| --- | --- | --- | --- |
+| `nieuwsblad.be` | sent | sent | sent |
+| `www.nieuwsblad.be` | sent | **no match** | **no match** |
+
+The apex covers the `www` host and every other subdomain; the `www` host covers only itself. That
+matters more than it looks, because publishers move between hosts: a link that resolves to the bare
+domain, a podcast or live-blog subdomain, a redesign that drops the `www`.
+
+This is the opposite of what this section used to say, and the old advice was wrong. It described
+the matching rule correctly and then drew the wrong conclusion from it — "use what the address bar
+shows" gives you the narrow host every time, since article URLs almost always carry the `www`.
+
+Settings now offers the apex when you paste a `www` URL, as a suggestion you can decline. Nothing
+rewrites what you typed: narrowing is occasionally deliberate.
+
+**Already stored one with the `www`?** It works for ordinary article URLs; it simply won't cover the
+apex or other subdomains. Save it again at the apex — that stores a second entry, and the more
+specific one wins where both match — then **Sign out** of the `www` one.
 
 ## Step 4 — Check that it worked
 
@@ -181,7 +208,7 @@ Managing what's there:
 
 ```bash
 npm run session -- list                      # hosts and cookie names, never values
-npm run session -- remove www.nieuwsblad.be  # forget one publisher
+npm run session -- remove nieuwsblad.be      # forget one publisher
 ```
 
 You can edit `sessions.txt` by hand — host, a space, the header — but there's rarely a reason to.
@@ -212,13 +239,13 @@ A key-value store — "KV" — is a very small database that is really just a di
 key, it gives you back a value. No tables, no schema, no SQL. What it holds is exactly this:
 
 ```
-"www.ft.com"        →  "FTSession=abc; FTUser=def"
-"www.nieuwsblad.be" →  "nb_session=...; consent=1"
+"ft.com"        →  "FTSession=abc; FTUser=def"
+"nieuwsblad.be" →  "nb_session=...; consent=1"
 ```
 
 Which is to say: **`sessions.txt`, but hosted.** Same shape, same contents, somewhere your deployed
-app can reach it. In practice that is Vercel KV or Cloudflare KV depending on where you deploy; both
-have free tiers vastly larger than a few dozen cookie strings need.
+app can reach it. In practice that is a managed Redis — Upstash, Vercel KV, Redis Cloud — whose free
+tiers are all vastly larger than a few dozen cookie strings need.
 
 It is not Postgres or Supabase on purpose. There is one user and one access pattern — *give me the
 cookies for this host*. A relational database would be a two-column table that is never joined,
@@ -230,9 +257,20 @@ There, the values are encrypted under `STASH_ENCRYPTION_KEY` before being writte
 provider stores ciphertext, and they are never sent to the browser — the page asks your deployment
 for an article, and the server-side function attaches the cookies.
 
-**Setting it up.** Attach a KV store to the project; most hosts then inject the two variables the app
-looks for (`KV_REST_API_URL` and `KV_REST_API_TOKEN`, or Upstash's `UPSTASH_REDIS_REST_URL` /
-`_TOKEN`). Then set `STASH_ENCRYPTION_KEY` to 32 random bytes — `openssl rand -base64 32`. Both, or
+**Setting it up.** Attach a Redis store to the project. Providers hand out two different things for
+the same store and Stash accepts either, so whichever yours injects will do:
+
+- an **HTTP** endpoint with a bearer token — `KV_REST_API_URL` / `KV_REST_API_TOKEN`, or Upstash's
+  `UPSTASH_REDIS_REST_URL` / `_TOKEN`. Preferred where it exists: it is stateless, so there is no
+  connection to go stale between requests and no handshake to pay on a cold start.
+- a **`redis://` connection string** — `REDIS_URL`, `KV_URL` or `UPSTASH_REDIS_URL`. This is all
+  Redis Cloud, ElastiCache and a plain server give you, and for a while Stash could not use it and
+  reported that no store was attached. It can now. Prefer `rediss://` where the provider offers it:
+  the connection carries these cookies.
+
+`STASH_KV_URL` / `STASH_KV_TOKEN` and `STASH_REDIS_URL` override the injected ones, for a project
+with more than one store attached. Then set `STASH_ENCRYPTION_KEY` to 32 random bytes —
+`openssl rand -base64 32`. Both, or
 neither: a store with no key is refused rather than filled with plaintext credentials, and no store
 at all is a perfectly good deployment that still extracts articles anonymously.
 

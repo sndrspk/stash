@@ -48,13 +48,17 @@ what each attempt got:
   layout you move through sideways; scrolling is the ordinary web one, and is the default on a
   phone. Per-article archive and delete, sticky typography preferences (font, size, line height,
   column width), and a choice of paper — beige, white, blue, lilac or mustard — which the whole app
-  is printed on.
+  is printed on. Under the headline, every article says where its text came from — Instapaper or
+  Stash's own extraction — and links to the publisher's page.
 - **Sync.** Archive and delete hit the Instapaper API, not just local state. Bookmarks added
   elsewhere (phone, browser extension) appear on the next refresh.
 - **Better text than Instapaper alone.** Instapaper's own extractor gives up on some paywalled or
   script-heavy pages. When it returns nothing usable, Stash re-extracts the article itself — and
   for publishers you subscribe to, it can replay a session you established yourself so the page
-  arrives complete.
+  arrives complete. Stash's own extraction also recovers the standfirst, the paragraph between
+  headline and body that Readability drops when a publisher marks it up outside the article
+  container. Note the boundary: re-extraction only happens when Instapaper's text is missing or
+  looks truncated, so an article Instapaper returns *complete but imperfect* is shown as it came.
 
 The product spec is [`docs/DESIGN_SPEC.md`](docs/DESIGN_SPEC.md) and the extraction subsystem is
 [`docs/EXTRACTION.md`](docs/EXTRACTION.md); where the implementation deliberately departs from
@@ -79,9 +83,11 @@ either, [`WORKPLAN.md`](WORKPLAN.md) records why.
 - **Cache is per-device**, in IndexedDB: bookmarks, article text, reading preferences. None of it is
   precious — Instapaper is the source of truth and text is re-fetchable — so eviction costs an API
   round-trip, not data.
-- **A small KV store** holds the two things that can't live in the browser or in env vars: resolved
-  image URLs (expensive to re-derive, worth sharing across devices) and encrypted per-publisher
-  session cookies.
+- **A small Redis store** holds the two things that can't live in the browser or in env vars:
+  resolved image URLs (expensive to re-derive, worth sharing across devices) and encrypted
+  per-publisher session cookies. Either transport works — an HTTP endpoint with a bearer token, or a
+  `redis://` connection string — because managed Redis comes in both shapes and a reader who has
+  attached one should not have to attach the other.
 - **Access is gated by a passphrase** you set at deploy time. Without it, anyone who finds the URL
   can read and delete your Instapaper queue.
 

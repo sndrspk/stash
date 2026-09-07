@@ -68,6 +68,13 @@ because something shipped broken once.
   `bookmarks/add`. The constraint list in the README is the authority.
 - **Article HTML is untrusted**, from `get_text` and doubly so from our own extraction.
   Sanitize before injecting.
+- **So is a bookmark's URL.** It comes from Instapaper, and rendering one as an `href`
+  goes nowhere near DOMPurify — React escapes text but renders `javascript:` without
+  complaint. `externalHref` in `src/lib/sanitize.ts` is the only way one reaches the DOM.
+- **Say which copy of an article is on screen.** `readBestText` prefers our extraction
+  over Instapaper's silently, and a reader comparing against the publisher's page cannot
+  otherwise tell which they have — nor can the next person debugging a missing paragraph,
+  which is what it cost the first time.
 - **Say what happened, not what it probably means.** Error surfaces name the variable,
   the status or the actual exception. Two separate incidents in `WORKPLAN.md` cost real
   time to messages that described a symptom while the process held the cause —
