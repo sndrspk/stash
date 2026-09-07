@@ -1077,11 +1077,20 @@ anything already reading as complete — so after a successful extraction the bu
 gone, and with it any way to perform the test. The same gap is why an improved extractor
 never reached anything already cached.
 
-One control now carries both meanings: **Full text** when what is on screen is a stub,
-**Re-extract** when an extraction is stored. Both pass `force`, which is the whole
-distinction from the automatic pass — a press is a decision, so it skips the heuristic, the
-backoff and the already-extracted gate. One control rather than two because the phone bar
-had no room for a seventh, and because they are never both the right thing to offer.
+One control now carries three meanings and is always offered: **Full text** when what is on
+screen is a stub, **Re-extract** when an extraction is stored, **Extract** when neither.
+Both of the first two shipped before the third, and shipping them without it did not fix
+the problem — the first reader to look still saw "Text from Instapaper" on every article and
+no button anywhere, because none of his articles was a stub and none had an extraction. An
+article Instapaper returns complete could not be fetched at all.
+
+That was the same mistake twice in one change: reasoning about which states deserve a
+control instead of enumerating the states that exist. There are three, not two, and the
+third is the common one.
+
+All three pass `force`, which is the whole distinction from the automatic pass — a press is
+a decision, so it skips the heuristic, the backoff and the already-extracted gate. The
+machinery was always willing; only the button's visibility said no.
 
 Two things worth carrying:
 
@@ -1089,7 +1098,7 @@ Two things worth carrying:
   stub into a full article" sat in the plan reading like a two-minute job, through several
   reviews, while the interface offered no way to do it. It survived because it was written
   from the design rather than from an attempt. The reader who tried it found the gap in one
-  message.
+  message — and then found the *second* gap, in the fix for the first, in one more.
 - **The identifier a reader reaches for is the one the screen shows.** Asked to find an
   article needing this test, the obvious move was to look for "Text from Instapaper" — which
   is the normal state of almost every article, and says nothing about whether anything is

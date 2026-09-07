@@ -21,12 +21,17 @@ something already built.
       makes a paywalled article arrive complete — has never been checked end to end on the
       deployment.
 
-      **Now performable, which it was not before.** Open an article showing
-      `EXTRACTED BY STASH, WITH YOUR SESSION` — that line is the confirmation, and it comes
-      from the server rather than from inference. For the second half of the "done when",
-      sign out of that publisher and press **Re-extract**: it should come back a stub.
-      Neither the wording nor the button existed until now, which is why this item sat here
-      looking like a two-minute job.
+      **Now performable on any article.** Open one from a publisher you have a session for
+      and press **Extract** — the control is offered whatever state the article is in, so it
+      no longer has to be one Instapaper happened to return as a stub. The line under the
+      headline then reads `EXTRACTED BY STASH, WITH YOUR SESSION`, which is the
+      confirmation, and it comes from the server rather than from inference. For the second
+      half of the "done when", sign out of that publisher and press **Re-extract**: it
+      should come back a stub.
+
+      None of that existed until now, which is why this item sat here twice looking like a
+      two-minute job. **Take the update prompt first** — the app installs a new build and
+      waits for you to accept it, so a merge alone does not change what is on screen.
       → [Phase 7b](WORKPLAN.md#7b--manual-site-sessions)
 - [ ] **Install to the home screen on iOS, and open it offline there.** Phase 8's "done when".
       Running smoothly on an iPad in Safari is not the same claim as installing and cold-starting
@@ -40,13 +45,17 @@ something already built.
 
 Both are the same root seen from two ends, which is why neither has been fixed piecemeal.
 
-- [ ] **Articles Instapaper returns "complete but imperfect" are never cleaned.** The
-      extraction-time cleaners live in `api/extract`, so an article that passes the truncation
+- [ ] **Articles Instapaper returns "complete but imperfect" are never cleaned automatically.**
+      The extraction-time cleaners live in `api/extract`, so an article that passes the truncation
       heuristic gets furniture removal at render and nothing else — no duplicate-title strip, no
-      intro restore, no standfirst recovery. This is why one article still opens at its second
-      paragraph. Obstacles: `findLede` needs the *source page*, which `get_text` output is not;
-      and reaching already-cached text needs a re-sync or a migration.
-      → [Open questions](WORKPLAN.md#open-questions)
+      intro restore, no standfirst recovery. This is why one article opens at its second
+      paragraph.
+
+      **There is a manual answer now:** press **Extract** on such an article and our copy
+      replaces Instapaper's, standfirst included. What is unsolved is doing it without being
+      asked — the app cannot tell "complete" from "complete but missing its opening paragraph"
+      without fetching the publisher's page, which is the expensive thing the heuristic exists
+      to avoid. → [Open questions](WORKPLAN.md#open-questions)
 - [x] ~~**A cached extraction never picks up an improved extractor.**~~ **Answered for one
       article at a time.** The reading view now offers **Re-extract** whenever an extraction is
       stored, not only when what is on screen still looks like a stub, so an article can be
