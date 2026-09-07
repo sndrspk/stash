@@ -27,8 +27,16 @@ import { code } from './source-scan';
  */
 const ENTRY = 'src/main.tsx';
 
-/** Packages that mean "this module expects to be on a server". */
-const SERVER_ONLY = ['linkedom', '@mozilla/readability'];
+/**
+ * Packages that mean "this module expects to be on a server".
+ *
+ * `ioredis` is here for a slightly different reason than the parsers: it opens TCP
+ * sockets, which a browser cannot do at all, so it would not merely be dead weight in
+ * the bundle — it would be a build that fails or a runtime that throws. `src/lib/kv.ts`
+ * imports it, and `kv.ts` sits in `src/lib` alongside modules the client does use, so
+ * the wrong import is one autocomplete away.
+ */
+const SERVER_ONLY = ['linkedom', '@mozilla/readability', 'ioredis'];
 
 const EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx'];
 

@@ -49,6 +49,9 @@ because something shipped broken once.
   extraction-time trio on linkedom. Importing the latter from `src/routes`,
   `src/components` or `src/hooks` puts ~470 KiB of parser back in the bundle. See
   `test/client-bundle.test.ts`.
+- **`ioredis` is server-only too**, and for a harder reason than the parsers: it opens TCP
+  sockets, which a browser cannot do at all. `src/lib/kv.ts` imports it and sits beside
+  modules the client does use, so the wrong import is one autocomplete away. Same test.
 - **Secrets are never `VITE_`-prefixed.** Anything so named is inlined into the client
   bundle by design, and `import.meta.env` looks close enough to `process.env` that
   reaching for the wrong one is a natural and silent mistake. `npm run verify:build`

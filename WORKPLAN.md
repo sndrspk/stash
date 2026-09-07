@@ -1022,6 +1022,47 @@ page — which is what a reader actually does — is what fires the event. Both 
 are now `networkMode: 'always'`, which is not a workaround but an accurate description of what they
 depend on: IndexedDB.
 
+### The store had a shape the design had not allowed for
+
+The first deployment to actually attach a store attached Redis Cloud, and Settings said no
+store was attached. Both were right. `lib/kv.ts` spoke Redis over HTTP and nothing else,
+on the reasoning that a serverless invocation is short and stateless and an HTTP request
+fits it exactly — which is true, and which quietly assumed every managed Redis offers an
+HTTP endpoint. Upstash and Vercel KV do. Redis Cloud, ElastiCache and a plain server do
+not: they hand you a `redis://` URL and that is all there is.
+
+So there are two transports now. `restKv` is unchanged and still preferred — stateless, no
+connection to go stale while the container is frozen, no handshake on a cold start.
+`tcpKv` is the other one, and the cost it carries is the connection: one per URL cached for
+the life of the process, `lazyConnect` so importing the module opens nothing, and a
+five-second `commandTimeout` because the failure that matters is not a refused connection
+but one that died while the container slept and would otherwise hang the request. HTTP
+wins when both are configured.
+
+It costs a dependency, which this module was proud of not having. `ioredis` rather than a
+hand-rolled RESP client, because the thirty-lines-of-fetch argument does not carry over:
+this connection carries the reader's publisher session cookies, and TLS, AUTH and protocol
+framing are not places to be inventive to save a dependency.
+
+Two things are worth carrying forward:
+
+- **The diagnostic outlived the fault.** `describeKvEnv` had just been written to explain
+  that a `redis://` string is why no store was found. One commit later that sentence was
+  false — a connection string is now a working store, so a deployment with one never
+  reaches the function that says it. It is deleted rather than reworded. A message that
+  describes a fault the code no longer has sends the next reader to check something
+  already correct, which is the same hour the message was written to save.
+- **The stub proved the shape, not the protocol.** `kv.test.ts` drives `tcpKv` against a
+  Map to reach the cursor and error paths a healthy server will not produce on demand, and
+  that is all it can honestly claim. `kv-redis.test.ts` drives a real `redis-server`:
+  round-tripping ciphertext, `null` for an absent key against the empty string, 500 keys
+  across a real SCAN cursor, prefix isolation, and a publisher session stored and listed
+  end to end with the raw blob read back off the wire to confirm no cookie name or value
+  is in it. It is opt-in on `STASH_TEST_REDIS_URL` and **skipped visibly** rather than
+  silently, because a test that vanishes with its dependency reads exactly like one that
+  passed. The prefix-isolation assertion was checked by breaking the filter and watching
+  it fail.
+
 ### The deploy log was worth reading
 
 The first real deployment produced four build warnings. Three were noise — an unbounded

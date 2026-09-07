@@ -2,10 +2,15 @@ import { describe, expect, it } from 'vitest';
 
 import {
   KvUnavailableError,
+  type RedisLike,
+  connectionCount,
   describeKvEnv,
   memoryKv,
+  openKv,
   readKvCredentials,
+  readRedisUrl,
   restKv,
+  tcpKv,
 } from '../src/lib/kv';
 
 describe('readKvCredentials', () => {
@@ -76,26 +81,20 @@ describe('describeKvEnv', () => {
     );
   });
 
-  it('explains a connection string, which is the attached-but-unreachable case', () => {
-    // The one that looks least like a misconfiguration: the store exists, the
-    // dashboard shows a variable for it, and this client cannot use it.
-    const said = describeKvEnv({ REDIS_URL: 'redis://default:pw@host:6379' });
-    expect(said).toContain('REDIS_URL is set');
-    expect(said).toContain('redis:// connection string');
-    expect(said).toContain('UPSTASH_REDIS_REST_URL');
-  });
-
   it('lists what it looked for when nothing at all is set', () => {
     const said = describeKvEnv({});
     expect(said).toContain('STASH_KV_URL/STASH_KV_TOKEN');
     expect(said).toContain('KV_REST_API_URL/KV_REST_API_TOKEN');
     expect(said).toContain('UPSTASH_REDIS_REST_URL/UPSTASH_REDIS_REST_TOKEN');
+    // Both transports, since either would have worked.
+    expect(said).toContain('STASH_REDIS_URL');
+    expect(said).toContain('REDIS_URL');
   });
 
   it('always mentions the redeploy and the scope', () => {
     // Both are true of a dashboard that shows the variable and a function that does
     // not see it, which is the state an operator is in when they read this at all.
-    for (const env of [{}, { KV_REST_API_URL: 'https://kv.example' }, { REDIS_URL: 'redis://x' }]) {
+    for (const env of [{}, { KV_REST_API_URL: 'https://kv.example' }]) {
       expect(describeKvEnv(env)).toContain('redeploy');
       expect(describeKvEnv(env)).toContain('Production');
     }
@@ -104,12 +103,8 @@ describe('describeKvEnv', () => {
   it('never repeats a value back', () => {
     // Names only. The screen is behind the gate, but a token has no business in a
     // rendered string and this is cheaper to keep than to audit.
-    const said = describeKvEnv({
-      KV_REST_API_URL: 'https://real-store.upstash.io',
-      REDIS_URL: 'redis://default:sup3rsecret@host:6379',
-    });
+    const said = describeKvEnv({ KV_REST_API_URL: 'https://real-store.upstash.io' });
     expect(said).not.toContain('real-store');
-    expect(said).not.toContain('sup3rsecret');
   });
 });
 
@@ -181,6 +176,113 @@ describe('restKv', () => {
         new Response(JSON.stringify({ error: 'WRONGTYPE' }), { status: 200 }),
       )) as unknown as typeof fetch;
     await expect(restKv(credentials, fetchImpl).get('k')).rejects.toThrow('WRONGTYPE');
+  });
+});
+
+/**
+ * A Redis that behaves like one, over a Map. Not a stand-in for the real server —
+ * `kv-redis.test.ts` drives that — but the way to reach the error and cursor paths a
+ * healthy server will not produce on demand.
+ */
+function fakeRedis(overrides: Partial<RedisLike> = {}): RedisLike {
+  const map = new Map<string, string>();
+  return {
+    get: (key) => Promise.resolve(map.get(key) ?? null),
+    set: (key, value) => Promise.resolve(map.set(key, value)),
+    del: (key) => Promise.resolve(map.delete(key) ? 1 : 0),
+    scan: (_cursor, _m, pattern, _c, _count) => {
+      const prefix = pattern.replace(/\*$/, '');
+      return Promise.resolve(['0', [...map.keys()].filter((key) => key.startsWith(prefix))]);
+    },
+    ...overrides,
+  };
+}
+
+describe('tcpKv', () => {
+  it('reads back what it wrote, and reports a delete honestly', async () => {
+    const kv = tcpKv(fakeRedis());
+
+    await kv.set('p:a', 'ciphertext');
+    expect(await kv.get('p:a')).toBe('ciphertext');
+    expect(await kv.get('p:missing')).toBeNull();
+    expect(await kv.delete('p:a')).toBe(true);
+    expect(await kv.delete('p:a')).toBe(false);
+  });
+
+  it('follows the SCAN cursor to the end', async () => {
+    const pages: Record<string, [string, string[]]> = {
+      '0': ['17', ['p:a', 'p:b']],
+      '17': ['0', ['p:b', 'p:c']],
+    };
+    const kv = tcpKv(fakeRedis({ scan: (cursor) => Promise.resolve(pages[cursor] ?? ['0', []]) }));
+
+    // Deduplicated: SCAN may return the same key on two pages, and a settings screen
+    // listing one publisher twice would look like two stored sessions.
+    expect((await kv.keys('p:')).sort()).toEqual(['p:a', 'p:b', 'p:c']);
+  });
+
+  it('stops rather than spinning when a server never returns cursor 0', async () => {
+    let calls = 0;
+    const kv = tcpKv(
+      fakeRedis({
+        scan: () => {
+          calls += 1;
+          return Promise.resolve(['1', ['p:a']]);
+        },
+      }),
+    );
+
+    await kv.keys('p:');
+    expect(calls).toBeLessThanOrEqual(100);
+  });
+
+  it('turns a dropped connection into KvUnavailableError, keeping the cause', async () => {
+    // "ECONNREFUSED" names the fault; "could not reach the store" asserts one. The
+    // operator reading this is the only person who can act on it.
+    const kv = tcpKv(fakeRedis({ get: () => Promise.reject(new Error('ECONNREFUSED 127.0.0.1')) }));
+
+    await expect(kv.get('p:a')).rejects.toThrow(KvUnavailableError);
+    await expect(kv.get('p:a')).rejects.toThrow(/ECONNREFUSED/);
+  });
+});
+
+describe('readRedisUrl', () => {
+  it('prefers the variable a deployment sets deliberately', () => {
+    expect(
+      readRedisUrl({ STASH_REDIS_URL: 'redis://mine', REDIS_URL: 'redis://theirs' })?.url,
+    ).toBe('redis://mine');
+  });
+
+  it('finds what a provider injects on its own', () => {
+    expect(readRedisUrl({ REDIS_URL: 'rediss://host:6379' })).toEqual({
+      url: 'rediss://host:6379',
+      source: 'REDIS_URL',
+    });
+  });
+
+  it('ignores a whitespace-only value', () => {
+    expect(readRedisUrl({ REDIS_URL: '   ' })).toBeNull();
+    expect(readRedisUrl({})).toBeNull();
+  });
+});
+
+describe('openKv', () => {
+  it('prefers HTTP when a deployment has both', () => {
+    // Not arbitrary: HTTP is stateless, so it has no connection to go stale while the
+    // container is frozen and no handshake to pay on a cold start.
+    const before = connectionCount();
+    const kv = openKv({
+      KV_REST_API_URL: 'https://kv.example',
+      KV_REST_API_TOKEN: 't',
+      REDIS_URL: 'redis://127.0.0.1:1',
+    });
+    expect(kv).not.toBeNull();
+    // A REST store posts; reaching for it must not have opened a socket.
+    expect(connectionCount()).toBe(before);
+  });
+
+  it('is null when neither transport is configured', () => {
+    expect(openKv({})).toBeNull();
   });
 });
 
