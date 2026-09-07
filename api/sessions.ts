@@ -17,6 +17,7 @@
  */
 import { coerceHost } from '../src/lib/cookies.js';
 import { requireSession } from '../src/lib/guard.js';
+import { describeKvEnv } from '../src/lib/kv.js';
 import { EncryptionKeyError } from '../src/lib/secrets.js';
 import {
   deleteSession,
@@ -58,7 +59,8 @@ async function withContext(run: (context: SessionContext) => Promise<Response>):
       {
         error: 'no_store',
         detail:
-          'No key-value store is attached to this deployment, so publisher sessions cannot be saved. Extraction still runs without one.',
+          'No key-value store is attached to this deployment, so publisher sessions cannot be saved. ' +
+          `Extraction still runs without one. ${describeKvEnv()}`,
       },
       501,
     );
@@ -87,7 +89,12 @@ export async function GET(request: Request): Promise<Response> {
    * optional, extraction works without them — and it can only say it if this is a
    * normal response rather than a failure the UI renders as "could not load".
    */
-  if (context === null) return json({ configured: false, hosts: [], cleared: [] }, 200);
+  if (context === null) {
+    // `detail` names the variables rather than repeating the headline: the operator
+    // reading this screen is the only person who can fix it, and they are one
+    // redeploy or one misspelled variable away from it working.
+    return json({ configured: false, hosts: [], cleared: [], detail: describeKvEnv() }, 200);
+  }
 
   const listing = await listSessions(context);
   return json({ configured: true, ...listing }, 200);

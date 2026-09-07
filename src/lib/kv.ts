@@ -44,6 +44,73 @@ const ENV_PAIRS = [
   ['UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN'],
 ] as const;
 
+/**
+ * Variables that mean a store exists but cannot be reached from here.
+ *
+ * Every one of these is a `redis://` connection string for a TCP client. This module
+ * speaks Redis over HTTP, so a deployment can have a perfectly good store attached,
+ * have one of these injected for it, and still read as having none. It is the most
+ * likely reason for a sessions screen that says "no store" after the operator has
+ * demonstrably attached one, which is why they are named rather than ignored.
+ */
+const CONNECTION_STRING_VARS = ['REDIS_URL', 'KV_URL', 'UPSTASH_REDIS_URL'] as const;
+
+const isSet = (value: string | undefined): boolean => value !== undefined && value.trim() !== '';
+
+/**
+ * Why no store was found, in terms of variable names.
+ *
+ * `readKvCredentials` returns null for four quite different deployments, and the
+ * settings screen was reporting all four with one sentence that named none of them.
+ * That is the failure `docs/VERCEL.md` already records costing an hour: a message
+ * that describes the symptom while the process holds the cause.
+ *
+ * **Names only, never values.** This is behind the passphrase gate, but a token has
+ * no reason to be in a rendered string, and the rule is easier to keep than to audit.
+ */
+export function describeKvEnv(env: Record<string, string | undefined> = process.env): string {
+  const halves: string[] = [];
+  for (const [urlVar, tokenVar] of ENV_PAIRS) {
+    if (isSet(env[urlVar]) && !isSet(env[tokenVar])) {
+      halves.push(`${urlVar} is set but ${tokenVar} is not`);
+    }
+    if (isSet(env[tokenVar]) && !isSet(env[urlVar])) {
+      halves.push(`${tokenVar} is set but ${urlVar} is not`);
+    }
+  }
+
+  const strings = CONNECTION_STRING_VARS.filter((name) => isSet(env[name]));
+
+  const parts: string[] = [];
+  if (halves.length > 0) {
+    parts.push(`${halves.join('; ')}. Both halves of one pair are needed.`);
+  }
+  if (strings.length > 0) {
+    parts.push(
+      `${strings.join(' and ')} ${strings.length === 1 ? 'is' : 'are'} set, but that is a ` +
+        'redis:// connection string for a TCP client, and this deployment talks to the store ' +
+        'over HTTPS. Look for the pair your provider labels REST — on Upstash that is ' +
+        'UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN.',
+    );
+  }
+  if (parts.length === 0) {
+    parts.push(
+      'None of STASH_KV_URL/STASH_KV_TOKEN, KV_REST_API_URL/KV_REST_API_TOKEN or ' +
+        'UPSTASH_REDIS_REST_URL/UPSTASH_REDIS_REST_TOKEN reached this function.',
+    );
+  }
+
+  // True in every one of the cases above, and the two things that most often explain
+  // a variable that exists in the dashboard but not in the running function.
+  parts.push(
+    'If you have just added them, redeploy — the environment is attached at build time, ' +
+      'so an existing deployment keeps the set it was built with. And check the scope: a ' +
+      'variable set for Production is absent from a preview URL.',
+  );
+
+  return parts.join(' ');
+}
+
 export interface KvCredentials {
   url: string;
   token: string;

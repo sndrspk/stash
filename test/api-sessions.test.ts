@@ -208,7 +208,21 @@ describe('a deployment with no store', () => {
      */
     const response = await GET(get());
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ configured: false, hosts: [], cleared: [] });
+
+    const body = (await response.json()) as {
+      configured: boolean;
+      hosts: unknown[];
+      cleared: unknown[];
+      detail: string;
+    };
+    expect(body.configured).toBe(false);
+    expect(body.hosts).toEqual([]);
+    expect(body.cleared).toEqual([]);
+
+    // And it says *why*, in variable names. Reporting the four quite different
+    // deployments that land here with one sentence naming none of them is what sent
+    // an operator to the dashboard to re-check something already correct.
+    expect(body.detail).toContain('KV_REST_API_URL');
   });
 
   it('tells a POST plainly that there is nowhere to put it', async () => {

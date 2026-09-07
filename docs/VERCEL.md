@@ -141,6 +141,15 @@ credentials.
 | `KV_REST_API_URL` / `KV_REST_API_TOKEN` | Settings says no store is attached; sessions cannot be saved. Injected automatically when you attach a KV store to the project — `UPSTASH_REDIS_REST_URL` / `_TOKEN` work too, and `STASH_KV_URL` / `STASH_KV_TOKEN` override both. |
 | `STASH_ENCRYPTION_KEY` | With a store attached, saving a session answers 503 rather than writing plaintext. Generate one with `openssl rand -base64 32`. |
 
+**A `redis://` URL is not one of these.** Providers inject two quite different things
+for the same store: a connection string for a TCP client (`REDIS_URL`, `KV_URL`,
+`UPSTASH_REDIS_URL`) and an HTTPS endpoint with a bearer token, which is what the pairs
+above are. Stash talks to the store over HTTPS — a serverless function has nowhere to
+keep a pooled TCP connection — so a deployment can have a store genuinely attached, show
+a variable for it in the dashboard, and still report that none is attached. Look for the
+pair your provider labels **REST**. Settings names the variables it actually found, so
+read that before changing anything.
+
 Two things follow from where the key lives. **Rotating `STASH_ENCRYPTION_KEY` orphans every
 stored session** — the blobs are cleared on the next read and the settings screen says which
 hosts went, but re-capturing them means walking through every publisher again. And the KV

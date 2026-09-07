@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { KvUnavailableError, memoryKv, readKvCredentials, restKv } from '../src/lib/kv';
+import {
+  KvUnavailableError,
+  describeKvEnv,
+  memoryKv,
+  readKvCredentials,
+  restKv,
+} from '../src/lib/kv';
 
 describe('readKvCredentials', () => {
   it('finds the pair Vercel injects', () => {
@@ -42,6 +48,68 @@ describe('readKvCredentials', () => {
     expect(readKvCredentials({ KV_REST_API_TOKEN: 't' })).toBeNull();
     expect(readKvCredentials({ KV_REST_API_URL: '  ', KV_REST_API_TOKEN: 't' })).toBeNull();
     expect(readKvCredentials({})).toBeNull();
+  });
+});
+
+/*
+ * `readKvCredentials` returns null for four different deployments, and the settings
+ * screen reported all four with one sentence naming none of them. These pin what the
+ * operator is actually told, because the message *is* the feature here — a correct
+ * null with an uninformative explanation is the bug being fixed.
+ */
+describe('describeKvEnv', () => {
+  it('names both halves when only one is set', () => {
+    const said = describeKvEnv({ KV_REST_API_URL: 'https://kv.example' });
+    expect(said).toContain('KV_REST_API_URL is set but KV_REST_API_TOKEN is not');
+    expect(said).toContain('Both halves');
+  });
+
+  it('names it the other way round too', () => {
+    expect(describeKvEnv({ UPSTASH_REDIS_REST_TOKEN: 't' })).toContain(
+      'UPSTASH_REDIS_REST_TOKEN is set but UPSTASH_REDIS_REST_URL is not',
+    );
+  });
+
+  it('catches a whitespace-only value, which looks set in a dashboard', () => {
+    expect(describeKvEnv({ STASH_KV_URL: 'https://kv.example', STASH_KV_TOKEN: '   ' })).toContain(
+      'STASH_KV_URL is set but STASH_KV_TOKEN is not',
+    );
+  });
+
+  it('explains a connection string, which is the attached-but-unreachable case', () => {
+    // The one that looks least like a misconfiguration: the store exists, the
+    // dashboard shows a variable for it, and this client cannot use it.
+    const said = describeKvEnv({ REDIS_URL: 'redis://default:pw@host:6379' });
+    expect(said).toContain('REDIS_URL is set');
+    expect(said).toContain('redis:// connection string');
+    expect(said).toContain('UPSTASH_REDIS_REST_URL');
+  });
+
+  it('lists what it looked for when nothing at all is set', () => {
+    const said = describeKvEnv({});
+    expect(said).toContain('STASH_KV_URL/STASH_KV_TOKEN');
+    expect(said).toContain('KV_REST_API_URL/KV_REST_API_TOKEN');
+    expect(said).toContain('UPSTASH_REDIS_REST_URL/UPSTASH_REDIS_REST_TOKEN');
+  });
+
+  it('always mentions the redeploy and the scope', () => {
+    // Both are true of a dashboard that shows the variable and a function that does
+    // not see it, which is the state an operator is in when they read this at all.
+    for (const env of [{}, { KV_REST_API_URL: 'https://kv.example' }, { REDIS_URL: 'redis://x' }]) {
+      expect(describeKvEnv(env)).toContain('redeploy');
+      expect(describeKvEnv(env)).toContain('Production');
+    }
+  });
+
+  it('never repeats a value back', () => {
+    // Names only. The screen is behind the gate, but a token has no business in a
+    // rendered string and this is cheaper to keep than to audit.
+    const said = describeKvEnv({
+      KV_REST_API_URL: 'https://real-store.upstash.io',
+      REDIS_URL: 'redis://default:sup3rsecret@host:6379',
+    });
+    expect(said).not.toContain('real-store');
+    expect(said).not.toContain('sup3rsecret');
   });
 });
 
