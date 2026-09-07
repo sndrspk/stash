@@ -1053,7 +1053,47 @@ page — which is what a reader actually does — is what fires the event. Both 
 are now `networkMode: 'always'`, which is not a workaround but an accurate description of what they
 depend on: IndexedDB.
 
-### The honest User-Agent is the reason most extractions fail
+### The User-Agent was not the reason, and the probe said so in one command
+
+The section below was written from the code and from how bot protection is known to
+work, and it named the User-Agent as the reason most extractions returned 403. Setting
+`STASH_USER_AGENT` to a browser string on the deployment did not clear them: still 403 on
+some publishers, 405 on others, session sent.
+
+Running the probe against a real publisher from a laptop took one command and settled it:
+
+```
+anonymous   HTTP 200  raw 13 KB  extracted 1,069 chars  looks truncated
+            4 redirect(s) → https://sso.roularta.be/login
+            Inloggen. Vul hier je e-mailadres en wachtwoord in om aan te melden…
+```
+
+**200, not 403 — with the same browser User-Agent and no session at all.** So the
+User-Agent is not what those publishers object to, and the theory below was wrong. What
+knack.be actually does to an unauthenticated request is send it through four redirects to
+a single-sign-on host, which serves a perfectly ordinary sign-in page.
+
+Two things follow, and only the first is fixed here.
+
+**A 200 from another domain was being extracted as the article.** Readability reduced the
+sign-in page to a tidy paragraph reading "Inloggen", and but for the truncation heuristic
+catching it at 1,069 characters it would have been stored and rendered as the article
+text. A longer login page would have sailed through. `reachedSameSite` now ends the fetch
+when the final host is unrelated to the requested one — `www.knack.be` → `knack.be` is
+fine, `www.knack.be` → `sso.roularta.be` is not — reusing the cookie jar's own RFC 6265
+matching so the two cannot drift apart. A visible failure beats a cached article that is
+quietly wrong and reads like the publisher's own text.
+
+**Why the deployment says 403 where a laptop says 200 is still open.** The same URL, the
+same User-Agent, and a different answer. The remaining difference is where the request
+comes from: a serverless function in a datacentre against a residential connection, and
+datacentre address ranges are routinely refused by the same protection that lets a home
+address through. That is a hypothesis, and this time it stays labelled as one — the last
+one was stated with more confidence than the evidence carried and cost a deploy, a
+posture decision and two rounds to disprove. If it is right, no header changes it, and
+`docs/EXTRACTION.md`'s ceiling is where this stops.
+
+### The honest User-Agent is what this section originally blamed
 
 First use against real paywalled publishers returned **HTTP 403 on most of them**. Not a
 paywall stub, not an expired session — a refusal, before any cookie was read. Bot
