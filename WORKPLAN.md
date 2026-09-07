@@ -897,6 +897,15 @@ pasted session turns *that* publisher's stub into a full article — is the same
 already verified by hand on nieuwsblad.be in 7a, now going through the store instead of
 `sessions.txt`. It wants one confirmation on the deployment.
 
+**Update — sessions are stored on a real deployment.** A Redis Cloud store is attached and
+several publishers' sessions are in it, which closes the store half against real
+infrastructure rather than a Map. Getting there needed two changes recorded below: a TCP
+transport, because Redis Cloud offers no HTTP endpoint, and a diagnostic that names the
+variables it looked for. What is still unconfirmed is the narrow claim this "done when"
+actually makes — that a pasted session turns *that publisher's* stub into a full article on
+the deployment. First use went to a different question entirely, an article whose opening
+paragraph was missing, which is recorded below and was not about sessions at all.
+
 Two things the browser run changed, both invisible to a unit test:
 
 - **Six controls do not fit a phone bar.** A stub article carries Close, Original, Aa, Full text,
@@ -1177,19 +1186,35 @@ Two things are worth carrying forward from it:
 ## Open questions
 
 All prior blockers are cleared: the Instapaper credentials are in hand, the extraction method is
-specified in [`docs/EXTRACTION.md`](docs/EXTRACTION.md), and xAuth is confirmed. What remains is one
-preference.
+specified in [`docs/EXTRACTION.md`](docs/EXTRACTION.md), and xAuth is confirmed. What remains are
+product decisions and two questions that first real use put on the table.
 
 > **Resolved 2026-08-31 — xAuth on the consumer key.** `npm run connect` completed and returned a
 > token pair. That single result confirms three things at once: xAuth is enabled on the consumer key,
 > the OAuth 1.0a signing is correct against a real server and not only against the RFC, and the
 > account is reachable. It was the last item on the critical path that was outside our control.
 
-1. **Is the cookie paste tolerable?** Settled in principle — manual paste first, extension deferred
-   to 7c — but not yet in practice. Run `npm run probe` against two or three publishers you
-   subscribe to and see. If the copy step is fine, 7c stays deferred indefinitely; if it's the thing
-   that stops you using Stash, it moves up.
-2. **Does a large queue need a browsable index?** Raised by Phase 5. The front page shows fourteen
+1. **Is the cookie paste tolerable?** ~~Settled in principle but not in practice.~~ **Answered in
+   use.** Sessions for several regularly-read publishers have been pasted into a real deployment,
+   and the step was not what got in the way — so **7c stays deferred indefinitely**. What the
+   exercise did surface was a setting-up problem rather than a pasting one: the screen said no store
+   was attached while a perfectly good one sat there, which is `describeKvEnv` and the TCP transport
+   below.
+2. **Should the extraction-time cleaners run over `get_text` output?** New, and the sharpest thing
+   first use turned up. They live in `api/extract`, so an article Instapaper returns complete gets
+   furniture removal at render and nothing else — no duplicate-title strip, no intro restore, no
+   standfirst recovery. "Our cleaners only clean our own extraction" is not a rule anyone chose; it
+   is where the code happened to put them. Two obstacles, and they are why this is a question rather
+   than a task: `findLede` needs the *source page*, which `get_text` output is not, so that one
+   cannot simply be moved; and applying the others to stored text needs a re-sync or a migration to
+   reach anything already cached.
+3. **How does a cached extraction pick up an improved extractor?** It does not, today. Every fix to
+   the extraction path is invisible on articles already in the cache, and nothing in the interface
+   can force a re-run: the "Full text" button is gated on `needsExtraction`, false for anything that
+   already reads as complete. A "re-extract this article" affordance is the small answer; a stored
+   extractor version that invalidates on change is the thorough one. Neither is worth building until
+   the shape of question 2 is settled, since they solve the same problem from opposite ends.
+4. **Does a large queue need a browsable index?** Raised by Phase 5. The front page shows fourteen
    articles: four in image slots and ten in the sidebar lists. That is deliberate and it is what a
    front page is — but on a queue of fifty it means thirty-six unread articles are on no screen in
    the app, reachable only by refreshing until the shuffle happens to surface them. The spec

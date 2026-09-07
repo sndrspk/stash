@@ -1,6 +1,10 @@
 # Stash publisher sessions — one host per line, then its Cookie: header value.
 # Copy to sessions.txt (git-ignored) or, better, use: npm run session -- add <host>
-# See docs/COOKIE_SETUP.md.
+# See SESSIONS.md.
+#
+# Use the apex, not the www host: a session saved for ft.com is sent to www.ft.com
+# and every other subdomain, while one saved for www.ft.com is sent only to that
+# exact host. SESSIONS.md § Which host to use has the table.
 
-www.ft.com        FTSession=PASTE_THE_COOKIE_HEADER_VALUE_HERE; FTUser=...
-www.nieuwsblad.be nb_session=...; consent=...
+ft.com        FTSession=PASTE_THE_COOKIE_HEADER_VALUE_HERE; FTUser=...
+nieuwsblad.be nb_session=...; consent=...
