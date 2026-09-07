@@ -1053,6 +1053,39 @@ page — which is what a reader actually does — is what fires the event. Both 
 are now `networkMode: 'always'`, which is not a workaround but an accurate description of what they
 depend on: IndexedDB.
 
+### A merged change and a running build are different claims
+
+Twice in one afternoon a change was merged and appeared to do nothing. Once because the
+fix genuinely did not cover the case; once because the app was still running the previous
+build — `registerType: 'prompt'` installs a new one and waits to be accepted, which is the
+right behaviour for a reading app and indistinguishable, from the screen, from a change
+that did not work.
+
+The build number now sits beside the wordmark: `Stash v31`, numbered by the pull request
+that shipped it. Not semver, because the question it answers is not "what release is this"
+but "did the thing I merged reach me", and the number a reader already has in hand is the
+PR they merged.
+
+It sits beside the wordmark rather than inside its link — a version string is a label, not
+a destination — and in the shell's masthead rather than on the front page, so it is present
+on every screen except the reading view, which is deliberately bare. The gate carries its
+own copy, since that is the one screen reachable before the app has loaded anything.
+
+Two things to be honest about:
+
+- **It is a habit, not a mechanism.** A production build runs from `main` after the merge
+  and cannot know which PR it came from. `VERCEL_GIT_COMMIT_SHA` is available and truthful
+  but answers a different question: it identifies a commit, not a change someone reviewed
+  and merged. The number is bumped by hand, and a forgotten bump is worse than no number,
+  because it would report a fix as live when it is not. `test/version.test.ts` checks the
+  shape and that it never moves backwards; the rest is written down in `CLAUDE.md`.
+- **The first attempt went in the wrong place.** Asked for it beside the "Stash" heading, a
+  grep for `>Stash<` found only the unlock screen, and the badge went next to the front
+  page's "Unread" instead — the masthead's own wordmark lives in `AppLayout` with the text
+  on its own line, where that pattern does not match. Searching for the string as it would
+  appear in rendered output rather than in source is a way to be confidently wrong about a
+  file that is right there.
+
 ### Two questions the interface could not answer
 
 Confirming that a publisher session does anything turned out to be impossible from the
@@ -1077,11 +1110,20 @@ anything already reading as complete — so after a successful extraction the bu
 gone, and with it any way to perform the test. The same gap is why an improved extractor
 never reached anything already cached.
 
-One control now carries both meanings: **Full text** when what is on screen is a stub,
-**Re-extract** when an extraction is stored. Both pass `force`, which is the whole
-distinction from the automatic pass — a press is a decision, so it skips the heuristic, the
-backoff and the already-extracted gate. One control rather than two because the phone bar
-had no room for a seventh, and because they are never both the right thing to offer.
+One control now carries three meanings and is always offered: **Full text** when what is on
+screen is a stub, **Re-extract** when an extraction is stored, **Extract** when neither.
+Both of the first two shipped before the third, and shipping them without it did not fix
+the problem — the first reader to look still saw "Text from Instapaper" on every article and
+no button anywhere, because none of his articles was a stub and none had an extraction. An
+article Instapaper returns complete could not be fetched at all.
+
+That was the same mistake twice in one change: reasoning about which states deserve a
+control instead of enumerating the states that exist. There are three, not two, and the
+third is the common one.
+
+All three pass `force`, which is the whole distinction from the automatic pass — a press is
+a decision, so it skips the heuristic, the backoff and the already-extracted gate. The
+machinery was always willing; only the button's visibility said no.
 
 Two things worth carrying:
 
@@ -1089,7 +1131,7 @@ Two things worth carrying:
   stub into a full article" sat in the plan reading like a two-minute job, through several
   reviews, while the interface offered no way to do it. It survived because it was written
   from the design rather than from an attempt. The reader who tried it found the gap in one
-  message.
+  message — and then found the *second* gap, in the fix for the first, in one more.
 - **The identifier a reader reaches for is the one the screen shows.** Asked to find an
   article needing this test, the obvious move was to look for "Text from Instapaper" — which
   is the normal state of almost every article, and says nothing about whether anything is

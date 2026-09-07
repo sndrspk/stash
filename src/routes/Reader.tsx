@@ -396,23 +396,31 @@ export function Reader() {
             )}
           </div>
           {/*
-            One control, two meanings, because the bar has no room for a seventh and
-            they are never both the right thing to offer.
+            One control, three meanings, and always offered.
 
-            "Full text" when what is on screen is a stub: the offer to go and get the
-            article. "Re-extract" when an extraction is already stored: the offer to
-            fetch it again, which had no way of being asked before. That gap was not
-            cosmetic — the only way to confirm a publisher session does anything is to
-            sign out of it and fetch the same article again, and with the button
-            hidden behind `needsExtraction` there was no second fetch to be had. It is
-            also how an article picks up an improved extractor, which otherwise never
-            reaches anything already cached.
+            "Full text" when what is on screen is a stub. "Re-extract" when an
+            extraction is already stored. "Extract" when neither — Instapaper's copy
+            looks complete and the reader wants ours anyway.
 
-            Both pass `force`, which is the whole distinction from the automatic pass
-            above: a press is a decision, so it skips the heuristic, the backoff and
-            the already-extracted gate.
+            That third case is the one that was missing, and hiding it was not a
+            cosmetic choice. An article Instapaper returns complete could not be
+            fetched at all: no stub, so no "Full text"; no stored extraction, so no
+            "Re-extract". Which meant a reader could not test whether their publisher
+            session does anything except on an article that happened to be a stub, and
+            could not reach our extraction for an article Instapaper returned complete
+            but imperfect — the missing-standfirst case — even knowing exactly what was
+            wrong with it.
+
+            The machinery was always willing: `force` skips the heuristic, the backoff
+            and the already-extracted gate alike, which is the whole distinction from
+            the automatic pass above. Only the button's visibility said no.
+
+            It costs a fetch of the publisher's page when pressed, and nothing when
+            not. That is the right trade for a control a reader reaches for
+            deliberately, having already decided the copy on screen is not the one they
+            want.
           */}
-          {(canExtract || sources?.extracted != null) && (
+          {textLoaded && bookmark !== undefined && (
             <button
               type="button"
               className={styles.action}
@@ -421,10 +429,18 @@ export function Reader() {
               title={
                 canExtract
                   ? 'Fetch the full article from the publisher'
-                  : 'Fetch it from the publisher again, replacing the stored copy'
+                  : sources?.extracted != null
+                    ? 'Fetch it from the publisher again, replacing the stored copy'
+                    : "Fetch the publisher's own page, even though Instapaper's copy looks complete"
               }
             >
-              {extract.isPending ? 'Fetching…' : canExtract ? 'Full text' : 'Re-extract'}
+              {extract.isPending
+                ? 'Fetching…'
+                : canExtract
+                  ? 'Full text'
+                  : sources?.extracted != null
+                    ? 'Re-extract'
+                    : 'Extract'}
             </button>
           )}
           <button

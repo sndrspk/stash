@@ -166,8 +166,9 @@ specific one wins where both match — then **Sign out** of the `www` one.
 
 ### In the app
 
-Open one of that publisher's articles that Instapaper serves as a stub. Extraction runs on its own
-when it sees one, so there is usually nothing to press. The line under the headline is the answer:
+Open any article from that publisher and press **Extract** in the reading bar. (On an article
+Instapaper served as a stub, extraction has usually already run on its own and the button reads
+**Re-extract**.) The line under the headline is the answer:
 
 > NIEUWSBLAD.BE · **EXTRACTED BY STASH, WITH YOUR SESSION**
 
