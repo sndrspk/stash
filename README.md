@@ -208,10 +208,15 @@ variable rather than making you guess.
 
 ### 4. Optional: publisher sessions
 
-Only if you subscribe to publishers whose articles arrive as stubs. Attach a KV store to the project
-and set `STASH_ENCRYPTION_KEY` (`openssl rand -base64 32`), then follow
+Only if you subscribe to publishers whose articles arrive as stubs. Attach a Redis store to the
+project and set `STASH_ENCRYPTION_KEY` (`openssl rand -base64 32`), then follow
 [`SESSIONS.md`](SESSIONS.md). Without it, extraction still runs anonymously, which already handles a
 good share of soft paywalls.
+
+Either kind of store works. One that offers an HTTP endpoint (Upstash, Vercel KV) is preferred and
+is used automatically; one that offers only a `redis://` connection string (Redis Cloud,
+ElastiCache, your own server) is used when no HTTP pair is set. Settings names the variables it
+found, so it tells you which you have rather than leaving you to infer it.
 
 ### Before you deploy
 
