@@ -227,7 +227,20 @@ export function Reader() {
 
     if (outcome.kind === 'blocked') return { text: `That page cannot be fetched: ${outcome.tag}.` };
     if (outcome.kind === 'failed') {
-      return { text: `The publisher's page could not be read: ${outcome.tag}.` };
+      /*
+       * Whether cookies went out is the whole of what separates two different
+       * problems wearing the same status code.
+       *
+       * A 403 *with* a session is the publisher refusing us before the cookies were
+       * ever considered — bot protection, which pasting a fresh session will not
+       * touch. A 403 *without* one means nothing was stored for this host, and the
+       * thing to look at is the session list and the name it is filed under. Saying
+       * only "HTTP 403" sends a reader to re-paste a session that is working fine.
+       */
+      const how = outcome.authenticated
+        ? ' Your session was sent, so this is the publisher refusing the request itself, not a session problem.'
+        : ' No session was sent for this host — check Settings if you expected one.';
+      return { text: `The publisher's page could not be read: ${outcome.tag}.${how}` };
     }
     if (!outcome.truncated) return null;
 

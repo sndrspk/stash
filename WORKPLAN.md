@@ -1053,6 +1053,48 @@ page — which is what a reader actually does — is what fires the event. Both 
 are now `networkMode: 'always'`, which is not a workaround but an accurate description of what they
 depend on: IndexedDB.
 
+### The honest User-Agent is the reason most extractions fail
+
+First use against real paywalled publishers returned **HTTP 403 on most of them**. Not a
+paywall stub, not an expired session — a refusal, before any cookie was read. Bot
+protection rejects on User-Agent shape, and `Stash/0.1 (+repo)` is not browser-shaped, so
+a reader with a valid paid session was turned away for how the request introduced itself
+rather than for who was making it.
+
+The probe has said this all along, in the hint it prints on a refusal: "some publishers
+refuse anything that isn't a browser." It was written before there was a deployment to
+find out on.
+
+`STASH_USER_AGENT` overrides the default, per deployment, unset in the repository. The
+posture note in `docs/EXTRACTION.md` is widened to say what changed rather than quietly
+losing its edge, and the line it draws stays where it was:
+
+- **Googlebot stays out.** Publishers serve crawlers text they deliberately withhold from
+  readers, so a crawler UA takes something never on offer. That is circumvention whatever
+  the intent.
+- **A browser string is a different act** — one person's request, their own credentials, an
+  article they pay for — *and* it defeats a control the publisher chose to deploy. Both are
+  true, and the second does not stop being true because the first is.
+
+Opt-in because the deployment is one reader's and the choice is about their own
+subscriptions. As a default it would decide the question for everyone who forks this,
+including people who never considered it, which changes what the project is rather than
+what one deployment does.
+
+Two things worth carrying:
+
+- **A 403 was two problems wearing one status code.** With a session replayed it means the
+  publisher refused us before the cookies mattered; without one it means no session reached
+  that host, and the thing to check is the session list and the name it is filed under.
+  `api/extract` had always returned `authenticated` on the failure path and the client
+  dropped it, so the screen said "HTTP 403" and left a reader to guess — and the likelier
+  guess sends them to re-paste a session that is working perfectly.
+- **This could not be verified from here.** The development container's network policy
+  blocks outbound requests to publishers, so the diagnosis rests on the code, the probe's
+  own documented hint, and how bot protection is known to work — not on a measurement. It
+  is the most likely cause by some distance and it is still a hypothesis until a real
+  deployment with the variable set either stops 403-ing or does not.
+
 ### A merged change and a running build are different claims
 
 Twice in one afternoon a change was merged and appeared to do nothing. Once because the

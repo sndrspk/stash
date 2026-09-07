@@ -57,7 +57,7 @@ Ported as specified:
   derived accessor (`extracted ?? instapaper`) choosing what to render. A "show original" toggle
   comes free and a bad extraction is never destructive.
 - **Politeness.** Serial fetches with a ~250ms delay, an honest app-shaped User-Agent
-  (`Stash/1.0 (+repo-url)`), redirects on, short timeouts (10s connect / 15s read).
+  (`Stash/0.1 (+repo)`, overridable per deployment — see the posture note), redirects on, short timeouts (10s connect / 15s read).
 - **Failure discipline.** Non-2xx, empty body and empty Readability output are ordinary failures,
   not exceptions. Record a short stable tag ("HTTP 403", "Readability returned empty"), capped at
   80 characters — never a stack trace.
@@ -162,3 +162,26 @@ already has a paid, logged-in right to read — replayed from a session the user
 themselves, in their own browser, exactly as SanFeedBin has them do it in a WebView. It is not
 crawler-UA spoofing and not an archive mirror. Keep it that way: the moment the extractor starts
 claiming to be Googlebot, this stops being a reading tool and becomes a circumvention tool.
+
+### What use changed, and what it did not
+
+`Stash/0.1 (+repo)` is refused with **HTTP 403 by most paywalled publishers**, before any cookie is
+read. Bot protection rejects on User-Agent shape alone, so a reader with a valid paid session is
+turned away for how the request introduces itself rather than for who is making it.
+
+`STASH_USER_AGENT` overrides the default, per deployment, and is unset in the repository. The
+distinction it rests on is worth stating plainly rather than eliding:
+
+- **Claiming to be Googlebot stays out**, and the sentence above stands. Publishers serve crawlers
+  text they deliberately withhold from readers, so a crawler UA takes something that was never on
+  offer. That is circumvention whatever the intent behind it.
+- **Claiming to be a browser is a different act.** The request is one person's, carries their own
+  credentials, and asks for an article they pay for — which is what a browser request is. It is
+  also, unavoidably, defeating a control the publisher chose to deploy. Both of those are true and
+  the second does not disappear because the first is.
+
+It is opt-in because the deployment belongs to one reader and the choice is theirs to make about
+their own subscriptions. Making it the default would decide it on behalf of everyone who forks
+this, including people who never considered the question — which changes what the project is,
+rather than what one deployment does. Nothing else moves: still serial, still delayed, still only
+articles the reader already pays for.

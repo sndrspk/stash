@@ -75,6 +75,16 @@ Both are the same root seen from two ends, which is why neither has been fixed p
       network dependency tree, all the same fact. A deliberate architectural change, not a
       number to chase. → [Phase 8's Lighthouse item](WORKPLAN.md#phase-8--offline-and-pwa-polish)
 
+## Waiting on you to try it
+
+- [ ] **Does `STASH_USER_AGENT` actually clear the 403s?** Most paywalled publishers refuse
+      `Stash/0.1 (+repo)` before reading a cookie, which is why Extract mostly fails. Set the
+      variable to a browser string, redeploy, and try one — the diagnosis is well-supported by
+      the code and the probe's own hint, but this container cannot reach a publisher to test it,
+      so it is a hypothesis until your deployment says otherwise. Read the posture section of
+      [`docs/EXTRACTION.md`](docs/EXTRACTION.md) first; it is a decision, not a setting.
+      → [WORKPLAN](WORKPLAN.md#the-honest-user-agent-is-the-reason-most-extractions-fail)
+
 ## Small and optional
 
 - [ ] **`@mozilla/readability` carries a low-severity ReDoS advisory** (`<0.6.0`). Pre-existing

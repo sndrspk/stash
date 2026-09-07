@@ -46,7 +46,21 @@ export type ExtractOutcome =
       /** Whether a stored publisher session was replayed for this fetch. */
       authenticated: boolean;
     }
-  | { kind: 'failed'; tag: string }
+  | {
+      kind: 'failed';
+      tag: string;
+      /**
+       * Whether a session was replayed for the request that failed.
+       *
+       * The difference between the two 403s, and they want different fixes. With a
+       * session: the publisher refused us before the cookies mattered, which is what
+       * bot protection does — no amount of re-pasting helps. Without one: no session
+       * reached this host, so the thing to check is whether one is stored for it and
+       * under which name. Reporting "HTTP 403" alone leaves a reader to guess which,
+       * and the likelier guess is the wrong one.
+       */
+      authenticated: boolean;
+    }
   | { kind: 'blocked'; tag: string };
 
 export interface ExtractionResult {
@@ -82,7 +96,12 @@ async function requestExtract(url: string, excerpt: string): Promise<ExtractOutc
     // Permanent: this URL will never be fetched, so there is nothing to retry.
     return { kind: 'blocked', tag: body.detail ?? 'refused' };
   }
-  if (!response.ok) return { kind: 'failed', tag: `HTTP ${response.status}` };
+  // Our own function refused or fell over — not the publisher. Nothing was fetched on
+  // the reader's behalf, so no session was replayed and saying otherwise would be a
+  // guess about a request that never happened.
+  if (!response.ok) {
+    return { kind: 'failed', tag: `HTTP ${String(response.status)}`, authenticated: false };
+  }
 
   const body = (await response.json()) as {
     ok?: boolean;
@@ -93,7 +112,11 @@ async function requestExtract(url: string, excerpt: string): Promise<ExtractOutc
     authenticated?: boolean;
   };
   if (body.ok !== true || typeof body.html !== 'string' || body.html.trim() === '') {
-    return { kind: 'failed', tag: body.tag ?? 'Extraction returned nothing' };
+    return {
+      kind: 'failed',
+      tag: body.tag ?? 'Extraction returned nothing',
+      authenticated: body.authenticated === true,
+    };
   }
   return {
     kind: 'extracted',
