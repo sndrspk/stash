@@ -596,7 +596,10 @@ source of "works on desktop, broken on my phone".
 **Done when:** a long, image-heavy article paginates correctly on desktop and on a real phone, the
 0px check passes, and preferences apply live without losing the reader's position.
 
-**Status: done, on desktop and at phone size.** Driven in Chromium against the built client, using
+**Status: done — at phone size in Chromium, and since on real hardware.** The reading view has now
+been used on an Android phone, a MacBook and a tablet in Safari, which closes the "on a real phone"
+half of the done-when and retires the mobile-Safari pagination risk below as a thing to worry about
+rather than a thing to watch. The measurement run behind it: driven in Chromium against the built client, using
 the committed fixtures as the articles — which is what makes "a long, image-heavy article" a claim
 about something rather than about lorem ipsum. **46 checks, all passing.** The 0px check is asserted
 at nine points: the long article, that article scrolled to its end, each of the three column-width
@@ -939,11 +942,15 @@ own store review. Build only if the paste step is what stops you using Stash.
 **Done when:** the app installs on iOS and Android, opens offline, and shows a previously-read
 article with no network.
 
-**Status: offline verified end to end in Chromium; installing on real devices is not.** The browser
+**Status: offline verified end to end in Chromium; run on real devices 2026-09-07.** The browser
 run does the whole journey with `setOffline(true)` — cold start with no network, a previously-read
 article rendering from the cache, two archives queued, the intents surviving a reload, and the queue
-draining by itself when the network returns. What it cannot tell you is whether the app installs on
-an actual iPhone, which is the half of the "done when" that wants a phone.
+draining by itself when the network returns. What it could not tell you is how the app behaves on
+hardware, which is the half of the "done when" that wanted a phone: it has since been exercised on
+an Android phone, on a MacBook in the browser, and on a tablet in Safari, and runs smoothly on all
+three. What that does *not* yet cover is the install-to-home-screen step on iOS specifically, and a
+cold offline start on the devices rather than in the harness — the two claims the "done when"
+actually makes.
 
 Two things the run found, both invisible to a unit test and one of them a real bug in the design:
 
@@ -1050,11 +1057,12 @@ preference.
   encryption key are all env vars, and the deploy step verifies none of them reach the client
   bundle. Anything that ends up in a chat, an issue or a commit should be reissued rather than
   reasoned about.
-- **Column pagination on mobile Safari** is the biggest engineering risk. The
-  deterministic measurement approach is right, but dynamic viewport height and touch momentum will
-  need iteration. Fallback if it proves untenable on phones: vertical scroll on narrow viewports,
-  paginated columns on tablet and desktop. Don't reach for this early — the spec is explicit that
-  the pagination model is the point.
+- ~~**Column pagination on mobile Safari** is the biggest engineering risk.~~ **Retired 2026-09-07.**
+  The worry was that dynamic viewport height and touch momentum would defeat the deterministic
+  measurement approach, and that the fallback — vertical scroll on narrow viewports, paginated
+  columns on tablet and desktop — would have to be reached for. It did not: the app has been read on
+  an Android phone and on a tablet in Safari and paginates smoothly on both. The pagination model
+  stays the point, as the spec has it.
 - **Article HTML is untrusted input**, from `get_text` and doubly so from our own extraction.
   Sanitize before injecting. Easy to skip, hard to notice.
 - **A public URL in front of a destructive API.** The passphrase gate is the only thing between the
