@@ -15,7 +15,8 @@ use it, fork or clone this repo and deploy it yourself.
 > ship checklist — and it has been read on an Android phone, a MacBook and a tablet in Safari. Two
 > things are still open rather than done: a Lighthouse pass against a real deployment, and one
 > confirmation that a pasted publisher session turns that publisher's stub into a full article.
-> [`WORKPLAN.md`](WORKPLAN.md) is the running record.
+> [`TODO.md`](TODO.md) is the short list of what's left; [`WORKPLAN.md`](WORKPLAN.md) is the
+> running record behind it.
 
 ## Try the extraction probe
 
@@ -118,6 +119,7 @@ scripts/fonts.ts      Refetches the fonts; scripts/icons.ts redraws the icons
 test/                 Unit tests, adversarial where it matters
 fixtures/             Saved pages for offline testing
 SESSIONS.md           How to give Stash a publisher session, step by step
+TODO.md               What's still open, as a short list
 docs/DESIGN_SPEC.md   Product + technical spec (source of truth)
 docs/EXTRACTION.md    Full-text extraction, ported from the SanFeedBin method
 docs/VERCEL.md        Why vercel.json says what it says
@@ -125,8 +127,9 @@ WORKPLAN.md           Phased implementation plan, decisions, open questions, ris
 .env.example          Every environment variable, documented
 ```
 
-Some of what's in `src/lib` is Phase 7a extraction code, written early because it answers the
-riskiest product question first — it is not wired into the app yet.
+The extraction code in `src/lib` was written early, before the app around it, because it answers
+the riskiest product question first. It is wired in now: `api/extract` is what the reading view's
+"Full text" calls, and `npm run probe` drives the same modules from the command line.
 
 ## Getting started
 
