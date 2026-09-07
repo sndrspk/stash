@@ -24,6 +24,25 @@
   color: var(--ink-muted);
 }
 
+/*
+ * A button that reads as a link, because it acts on this form rather than navigating.
+ * `inherit` on font and size keeps it in the sentence it sits in — a default button
+ * face here would read as a second submit control next to "Save session".
+ */
+.link {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--ink);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.link:hover {
+  color: var(--accent);
+}
+
 .list {
   list-style: none;
   margin: 0 0 var(--space-6);

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 
+import { coerceHost, widerHost } from '../lib/cookies';
 import styles from './SiteSessions.module.css';
 
 /**
@@ -53,6 +54,10 @@ export function SiteSessions() {
   const [listing, setListing] = useState<Listing | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [host, setHost] = useState('');
+  // Recomputed on every keystroke, which is free: both are pure string work over a
+  // few dozen characters, and memoising them would cost more to read than to run.
+  const wider = widerHost(host);
+  const coerced = coerceHost(host);
   const [cookie, setCookie] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ text: string; bad: boolean } | null>(null);
@@ -231,12 +236,31 @@ export function SiteSessions() {
           className={styles.input}
           value={host}
           onChange={(event) => setHost(event.target.value)}
-          placeholder="www.ft.com"
+          placeholder="ft.com"
           autoComplete="off"
           autoCapitalize="none"
           spellCheck={false}
           required
         />
+
+        {/*
+          Offered, never applied on the reader's behalf.
+
+          Narrowing is occasionally deliberate, and silently rewriting what someone
+          typed into a credential store is the kind of helpfulness that is impossible
+          to argue with when it turns out to be wrong. The button says what it will do
+          and leaves the choice; declining it costs nothing and stores exactly what
+          was typed.
+        */}
+        {wider !== null && (
+          <p className={styles.detail}>
+            <button type="button" className={styles.link} onClick={() => setHost(wider)}>
+              Use {wider} instead
+            </button>{' '}
+            — it covers {coerced ?? 'this host'} and any other subdomain, where{' '}
+            {coerced ?? 'this host'} covers only itself.
+          </p>
+        )}
 
         <label className={styles.label} htmlFor="session-cookie">
           Cookie header

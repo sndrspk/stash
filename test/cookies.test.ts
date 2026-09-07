@@ -8,6 +8,7 @@ import {
   parseCookieHeader,
   parseCookieInput,
   serializeCookies,
+  widerHost,
 } from '../src/lib/cookies.js';
 
 describe('domainMatches', () => {
@@ -194,5 +195,51 @@ describe('parseCookieInput', () => {
     const result = parseCookieInput('supersecretvalue with no pairs');
     expect(result.format).toBe('unrecognised');
     expect(result.hint).not.toContain('supersecret');
+  });
+});
+
+/*
+ * The suggestion the settings screen makes, and the reason it exists: the documented
+ * way to fill the host field is to paste the article URL already on your clipboard,
+ * which virtually always carries a `www` — so the convenient action stores the
+ * narrower key. `domainMatches` is what makes that a real difference and not a
+ * cosmetic one.
+ */
+describe('widerHost', () => {
+  it('offers the apex for a www host', () => {
+    expect(widerHost('www.nrc.nl')).toBe('nrc.nl');
+    expect(widerHost('https://www.nrc.nl/nieuws/2026/01/01/iets')).toBe('nrc.nl');
+  });
+
+  it('offers nothing when there is nothing to widen', () => {
+    expect(widerHost('nrc.nl')).toBeNull();
+    expect(widerHost('')).toBeNull();
+    expect(widerHost('not a host at all')).toBeNull();
+  });
+
+  it('leaves a real subdomain alone', () => {
+    // `podcast.nrc.nl` may be exactly what the reader means, and widening it would be
+    // guessing. `www` is the only prefix that is never a publisher's own choice.
+    expect(widerHost('podcast.nrc.nl')).toBeNull();
+    expect(widerHost('www2.nrc.nl')).toBeNull();
+  });
+
+  it('does not suggest a single-label host', () => {
+    // `domainMatches` treats a single label as exact-only, so this would be a no-op
+    // dressed up as an improvement.
+    expect(widerHost('www.localhost')).toBeNull();
+  });
+
+  it('suggests something that genuinely matches more', () => {
+    // The claim the button makes, asserted rather than described.
+    const narrow = 'www.nrc.nl';
+    const wide = widerHost(narrow);
+    expect(wide).not.toBeNull();
+    if (wide === null) return;
+
+    for (const url of ['https://www.nrc.nl/a', 'https://nrc.nl/a', 'https://podcast.nrc.nl/a']) {
+      expect(cookieHeaderFor(url, { [wide]: 'sid=1' })).toBe('sid=1');
+    }
+    expect(cookieHeaderFor('https://nrc.nl/a', { [narrow]: 'sid=1' })).toBeNull();
   });
 });
