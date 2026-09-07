@@ -146,7 +146,7 @@ describe('the retry backoff', () => {
   it('records a failure rather than dropping it', async () => {
     // A failure nobody wrote down is a failure retried on every open.
     await writeText(1, 'instapaper', STUB, NOW);
-    const { fetchExtract } = recording({ kind: 'failed', tag: 'HTTP 403' });
+    const { fetchExtract } = recording({ kind: 'failed', tag: 'HTTP 403', authenticated: true });
 
     const result = await extractArticle(bookmark(), { fetchExtract, now: () => NOW });
 
