@@ -203,6 +203,29 @@ Beware the intermediate reading that looks like the third and is not: *most of t
 proves nothing on its own. Navigation, menus and footers are markup too, so a page can be 80% markup
 and hold no article at all. Only the prose count separates them.
 
+### One more command before calling it the ceiling
+
+The census looks for the signals it knows: JSON-LD, two named hydration shapes, paragraph markup. A
+page can still carry its body in some other blob, and on a real page tens of kilobytes of inline
+script routinely remain unaccounted for. **Absence of the signals you thought to look for is not
+absence of the thing.**
+
+Open the article in a browser, take four or five distinctive words from the *middle* of it, and
+search the saved file:
+
+```sh
+grep -c -i "vier of vijf woorden" page.html
+```
+
+`0` closes it: the text was never sent, and the fallback is opening the article in a browser — which
+is what the origin link in the reading bar is for. Anything above `0` means it is in there in a shape
+worth finding, and the census should learn to see it.
+
+This is what settled knack.be. The census reported no `articleBody`, no hydration payload, 3,368
+characters of visible text, and a paywall block as the fattest paragraph container — and the grep
+returned `0`, which turned a strong inference into an answer. The session was working throughout: it
+buys the signed-in shell rather than the login page, and the body arrives by script afterwards.
+
 ## A note on posture
 
 This design deliberately never pretends to be someone it isn't. It uses an honest app-shaped

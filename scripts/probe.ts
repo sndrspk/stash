@@ -22,6 +22,7 @@
  */
 
 import { readFile, writeFile } from 'node:fs/promises';
+import { pathToFileURL } from 'node:url';
 import { cookieHeaderFor, cookieNames } from '../src/lib/cookies.js';
 import { parseHTML } from 'linkedom';
 import { extract, extractFromHtml, type ExtractResult } from '../src/lib/extract.js';
@@ -280,28 +281,70 @@ function botProtectionHint(): void {
   console.log(`    note at the end of docs/EXTRACTION.md before changing it.`);
 }
 
-function summarize(host: string, anon: ExtractResult | null, auth: ExtractResult | null): void {
+/**
+ * Did the publisher treat the signed-in request differently at all?
+ *
+ * "The session changed nothing" used to be this script's verdict whenever the
+ * authenticated extraction came back short, and it offered two explanations — expired
+ * cookies, or a JavaScript-built body — as though nothing on hand could tell them apart.
+ * Something could. A publisher that does not recognise a session sends an anonymous
+ * visitor to a login host and serves everyone the same small page; one that does
+ * recognise it skips the redirect and serves noticeably more HTML, even when the article
+ * itself is still withheld. Both of those are in the results already.
+ *
+ * Returns the evidence rather than a boolean, because the number is what makes the
+ * verdict checkable instead of something to take on trust.
+ */
+export function sessionRecognised(anon: ExtractResult, auth: ExtractResult): string | null {
+  if (!auth.ok) return null;
+  const redirected = 'Redirected to ';
+  if (!anon.ok && anon.tag.startsWith(redirected)) {
+    return `the anonymous fetch was sent to ${anon.tag.slice(redirected.length)} and this one was not`;
+  }
+  if (anon.ok && auth.rawBytes > anon.rawBytes * 1.5) {
+    return `${kb(auth.rawBytes)} of HTML against ${kb(anon.rawBytes)} anonymous`;
+  }
+  return null;
+}
+
+function rawHint(): void {
+  console.log(`    ${DIM}npm run probe -- <url> --raw page.html${OFF} counts what is in the page:`);
+  console.log(`    a fat paragraph container beside a thin extraction means the article was sent`);
+  console.log(`    and scored wrong, which is fixable. A thin one means it was never sent.`);
+}
+
+export function summarize(
+  host: string,
+  anon: ExtractResult | null,
+  auth: ExtractResult | null,
+): void {
   const anonChars = anon?.ok === true ? anon.text.length : 0;
   const authChars = auth?.ok === true ? auth.text.length : 0;
 
   // Both attempts ran.
   if (anon !== null && auth !== null) {
-    if (isRefusal(anon) && auth.ok) {
-      console.log(
-        `  ${GREEN}→ The session is not optional here${OFF} — ${host} refuses anonymous fetches`,
-      );
-      console.log(`    outright, and serves the article once you're signed in.`);
-      return;
-    }
     if (isRefusal(anon) && isRefusal(auth)) {
       console.log(`  ${RED}→ Refused both ways.${OFF}`);
       botProtectionHint();
       return;
     }
-    if (authChars > anonChars * 1.5 && authChars > 0) {
-      console.log(
-        `  ${GREEN}→ The session is doing the work here${OFF} — ${n(authChars - anonChars)} more characters.`,
-      );
+    /*
+     * Complete, and better than anonymous. Guarded on the truncation verdict, which the
+     * old ordering left out: an authenticated 332 characters against a failed anonymous
+     * fetch satisfied "more characters than anonymous" and was announced as the session
+     * doing the work, while what was actually on screen was a subscription pitch.
+     */
+    if (auth.ok && !auth.truncation.truncated && (authChars > anonChars * 1.5 || !anon.ok)) {
+      if (isRefusal(anon)) {
+        console.log(
+          `  ${GREEN}→ The session is not optional here${OFF} — ${host} refuses anonymous fetches`,
+        );
+        console.log(`    outright, and serves the article once you're signed in.`);
+      } else {
+        console.log(
+          `  ${GREEN}→ The session is doing the work here${OFF} — ${n(authChars - anonChars)} more characters.`,
+        );
+      }
       return;
     }
     if (anon.ok && !anon.truncation.truncated) {
@@ -310,10 +353,24 @@ function summarize(host: string, anon: ExtractResult | null, auth: ExtractResult
       );
       return;
     }
+
+    const recognised = sessionRecognised(anon, auth);
+    if (recognised !== null) {
+      console.log(
+        `  ${YELLOW}→ The session is being honoured, and the article still isn't here.${OFF}`,
+      );
+      console.log(`    ${DIM}${recognised}${OFF} — so this is not an expired session.`);
+      console.log(`    What came back is the signed-in page without its body, which is the`);
+      console.log(`    JavaScript case in docs/EXTRACTION.md. Confirm it rather than assume it:`);
+      rawHint();
+      return;
+    }
     console.log(
-      `  ${YELLOW}→ The session changed nothing.${OFF} Either it has expired, or this page builds`,
+      `  ${YELLOW}→ The session changed nothing${OFF}, and nothing here says it was recognised.`,
     );
-    console.log(`    its body with JavaScript — which no amount of cookies will fix.`);
+    console.log(`    Most likely expired — re-paste it and run this again. If that changes`);
+    console.log(`    nothing either, the body is not in the HTML:`);
+    rawHint();
     return;
   }
 
@@ -476,14 +533,24 @@ async function main(): Promise<number> {
   return best === null ? 1 : 0;
 }
 
-main().then(
-  (code) => process.exit(code),
-  (error: unknown) => {
-    if (error instanceof SessionStoreError) {
-      console.error(`${RED}${error.message}${OFF}`);
+/*
+ * Only when run as a command. The verdict functions above are unit-tested, and importing
+ * this file to reach them must not fire a network probe and call `process.exit` in the
+ * middle of the suite.
+ */
+const invokedDirectly =
+  process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (invokedDirectly) {
+  main().then(
+    (code) => process.exit(code),
+    (error: unknown) => {
+      if (error instanceof SessionStoreError) {
+        console.error(`${RED}${error.message}${OFF}`);
+        process.exit(1);
+      }
+      console.error(error);
       process.exit(1);
-    }
-    console.error(error);
-    process.exit(1);
-  },
-);
+    },
+  );
+}

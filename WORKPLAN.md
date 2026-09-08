@@ -1104,6 +1104,46 @@ enough of a selector to find it in the file by eye. A fat top container beside a
 extraction is a scoring miss and fixable; a thin top container is the ceiling. That is the
 distinction three rounds of reasoning could not make and one column of numbers does.
 
+**The answer for knack.be is the ceiling.** 183 KB of HTML, 3,368 characters of visible
+text, and the two fattest paragraph containers are `div.c-paywall__header` (140 chars) and
+`div.c-paywall__content` (25). There is no third. A distinctive phrase from the middle of
+the article, taken from the browser where it renders perfectly well, appears zero times in
+the file.
+
+So the session works and is not the problem: it buys the *signed-in shell* rather than the
+login page — no SSO redirect, 183 KB against 13 KB anonymous, real title and byline — and
+the body is fetched by script after that. Case one in `docs/EXTRACTION.md`, and out of
+reach for anything without a JavaScript engine. Nothing further to try for this publisher.
+
+The grep is the part worth keeping as method. The census said "no `articleBody`, no
+recognised hydration payload", but it had only looked for two named payload shapes and 35
+KB of inline script remained unaccounted for — so "not there" was a strong inference and
+not a proof. Searching the file for a phrase only the real article contains costs one
+command and closes it. Absence of the signals you thought to look for is not absence of
+the thing.
+
+### Two verdicts the probe was giving wrongly
+
+Both found by running it rather than reading it, which is the pattern this file keeps
+recording.
+
+**"The session is doing the work here — 332 more characters."** The test was `authChars >
+anonChars * 1.5`, with no reference to the truncation verdict the same result carries. Once
+`reachedSameSite` started failing the anonymous fetch, `anonChars` became 0, and any
+authenticated result at all beat it — so a subscription pitch was announced as a success in
+green. Now gated on the extraction not being truncated, which is the thing the sentence was
+always claiming.
+
+**"Either it has expired, or this page builds its body with JavaScript."** Offered two
+explanations as though nothing on hand could separate them, when both results carry the
+evidence: a publisher that does not recognise a session redirects the anonymous visitor to
+a login host and serves everyone the same page; one that does skips the redirect and serves
+markedly more HTML, even while withholding the article. `sessionRecognised` reports that
+difference *and the number behind it*, so the verdict says "the session is being honoured,
+and the article still isn't here" with `183 KB of HTML against 13 KB anonymous` beside it —
+checkable rather than taken on trust. Where there is no such evidence it says so, and
+guesses expiry first, which is the cheap thing to rule out.
+
 ### The User-Agent was not the reason, and the probe said so in one command
 
 The section below was written from the code and from how bot protection is known to

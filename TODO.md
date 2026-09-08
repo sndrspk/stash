@@ -86,21 +86,29 @@ Both are the same root seen from two ends, which is why neither has been fixed p
       datacentre versus a home connection, and datacentre ranges are routinely refused where a
       residential address is not. **A hypothesis, not a diagnosis.**
 
-      Two ways to test it, both cheap. Add the session locally
-      (`npm run session -- add knack.be`) and re-probe: a full article proves the whole path
-      works from a laptop and isolates the difference to the deployment. Or fetch the same URL
-      from any cloud shell with the same User-Agent: a 403 there confirms it is the address.
+      **The laptop half has now been done.** With the session stored locally, knack.be answers
+      200 and honours it — no SSO redirect, 183 KB against 13 KB anonymous, real title and
+      byline. So the fetch path works end to end from a home connection, and the difference is
+      the deployment rather than anything in the code. That leaves the address hypothesis
+      standing but still untested.
 
-      If it is the address, no header fixes it, and the honest answer is the ceiling
-      `docs/EXTRACTION.md` already describes — with the origin link in the reading bar as the
-      fallback. → [WORKPLAN](WORKPLAN.md#the-user-agent-was-not-the-reason-and-the-probe-said-so-in-one-command)
-- [ ] **Is a short extraction a missing article, or one Readability could not see?** A 200 with
-      183 KB of HTML and 332 characters extracted has two explanations that look identical from
-      the outside, and only one of them is fixable. `npm run probe -- <url> --raw page.html`
-      now answers it: it saves the bytes the publisher sent and counts what is in them —
-      paragraphs, JSON-LD `articleBody`, hydration payload. A `articleBody` present but unused
-      is an extraction improvement worth making, and publisher-agnostic. Nothing there is the
-      ceiling. → [What this does not solve](docs/EXTRACTION.md#what-this-does-not-solve)
+      One cheap test remains: fetch the same URL from any cloud shell with the same
+      User-Agent. A 403 there confirms it is where the request comes from, and no header fixes
+      that — the honest answer is then the ceiling `docs/EXTRACTION.md` describes, with the
+      origin link in the reading bar as the fallback. Worth doing for the publishers that are
+      *not* knack, since knack turns out to be a ceiling regardless.
+      → [WORKPLAN](WORKPLAN.md#the-user-agent-was-not-the-reason-and-the-probe-said-so-in-one-command)
+- [x] ~~**Is a short extraction a missing article, or one Readability could not see?**~~
+      **Answered, and knack.be is closed.** `--raw` counts what the publisher sent: 183 KB of
+      HTML, **3,368 characters of visible text**, and the two fattest paragraph containers are
+      a paywall header (140 chars) and a paywall body (25). A distinctive phrase from the
+      middle of the article appears **zero** times in the file. The article was not sent.
+
+      The session is fine — it gets the signed-in shell rather than the login page — but the
+      body arrives by script afterwards, which is case one in `docs/EXTRACTION.md` and out of
+      reach for a parser. **Nothing more to try for this publisher**; the origin link in the
+      reading bar is the answer. → [What this does not
+      solve](docs/EXTRACTION.md#what-this-does-not-solve)
 
 ## Small and optional
 
