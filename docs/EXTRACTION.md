@@ -154,6 +154,31 @@ The workable fallback for all three is opening that article in a browser, not a 
 Worth knowing: within one publishing group, free articles often extract perfectly while premium ones
 don't — measure per article, not per domain, before writing a publisher off.
 
+### Telling the ceiling from a missed container
+
+The first case above — "a 200 with a large body and a tiny extraction" — is the signature of a
+JavaScript-rendered page, and it is also the signature of a page whose article *is* in the HTML in a
+form Readability does not read. Readability scores markup; it has no opinion about a `<script>`. So
+a body sitting in a JSON-LD `articleBody` or a framework's hydration payload is invisible to it and
+present in the file, and the two cases are indistinguishable from the outside while differing
+completely in what can be done about them.
+
+Count rather than guess:
+
+```sh
+npm run probe -- <url> --raw page.html
+```
+
+That fetches once, replaying a stored session if there is one, writes the bytes exactly as sent, and
+reports what is in them: `<p>` elements, how much of the page is inline script, whether any
+`application/ld+json` block carries an `articleBody` and how long it is, and whether a recognised
+hydration payload is there. `--file page.html` prints the same census for a page saved from a
+browser, which is the path for an article the deployment cannot reach at all.
+
+An `articleBody` present but unused is a **fixable** gap and a publisher-agnostic one: it is a
+schema.org field, not a site's markup. No `articleBody`, little paragraph markup, and most of the
+page in script is the ceiling — genuinely not there, and no extractor reaches it.
+
 ## A note on posture
 
 This design deliberately never pretends to be someone it isn't. It uses an honest app-shaped

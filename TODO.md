@@ -94,6 +94,13 @@ Both are the same root seen from two ends, which is why neither has been fixed p
       If it is the address, no header fixes it, and the honest answer is the ceiling
       `docs/EXTRACTION.md` already describes — with the origin link in the reading bar as the
       fallback. → [WORKPLAN](WORKPLAN.md#the-user-agent-was-not-the-reason-and-the-probe-said-so-in-one-command)
+- [ ] **Is a short extraction a missing article, or one Readability could not see?** A 200 with
+      183 KB of HTML and 332 characters extracted has two explanations that look identical from
+      the outside, and only one of them is fixable. `npm run probe -- <url> --raw page.html`
+      now answers it: it saves the bytes the publisher sent and counts what is in them —
+      paragraphs, JSON-LD `articleBody`, hydration payload. A `articleBody` present but unused
+      is an extraction improvement worth making, and publisher-agnostic. Nothing there is the
+      ceiling. → [What this does not solve](docs/EXTRACTION.md#what-this-does-not-solve)
 
 ## Small and optional
 

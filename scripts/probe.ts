@@ -16,6 +16,7 @@
  *   --out <file>        write the extracted article HTML for eyeballing
  *   --show <n>          print the first n characters of extracted text (default 300)
  *   --ua <string>       User-Agent to send (default: STASH_USER_AGENT, else Stash/0.1)
+ *   --raw <file>        save the publisher's HTML exactly as sent, before extraction
  *
  * Cookie VALUES are never printed. Names only — the same rule the real app follows.
  */
@@ -23,6 +24,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { cookieHeaderFor, cookieNames } from '../src/lib/cookies.js';
 import { extract, extractFromHtml, type ExtractResult } from '../src/lib/extract.js';
+import { guardedFetch } from '../src/lib/fetch-guard.js';
 import {
   DEFAULT_STORE_PATHS,
   loadSessionStore,
@@ -39,6 +41,7 @@ const OFF = '[0m';
 interface Args {
   url: string;
   userAgent: string | null;
+  raw: string | null;
   sessions: string | null;
   anonOnly: boolean;
   authOnly: boolean;
@@ -51,6 +54,7 @@ function parseArgs(argv: string[]): Args {
   const args: Args = {
     url: '',
     userAgent: null,
+    raw: null,
     sessions: null,
     anonOnly: false,
     authOnly: false,
@@ -60,7 +64,8 @@ function parseArgs(argv: string[]): Args {
   };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
-    if (arg === '--ua') args.userAgent = argv[++i] ?? args.userAgent;
+    if (arg === '--raw') args.raw = argv[++i] ?? null;
+    else if (arg === '--ua') args.userAgent = argv[++i] ?? args.userAgent;
     else if (arg === '--sessions') args.sessions = argv[++i] ?? args.sessions;
     else if (arg === '--file') args.file = argv[++i] ?? null;
     else if (arg === '--out') args.out = argv[++i] ?? null;
@@ -95,7 +100,6 @@ function report(label: string, result: ExtractResult): void {
     console.log(`${' '.repeat(20)}${DIM}${result.redirects} redirect(s) → ${result.url}${OFF}`);
 }
 
-/** A refusal the publisher issued deliberately, rather than a transport failure. */
 /**
  * The User-Agent for this run, if one was asked for.
  *
@@ -105,6 +109,90 @@ function report(label: string, result: ExtractResult): void {
  */
 function userAgentOption(args: Args): { userAgent?: string } {
   return args.userAgent === null ? {} : { userAgent: args.userAgent };
+}
+
+/** Recursively find the longest `articleBody` anywhere in a parsed JSON-LD value. */
+function longestArticleBody(value: unknown): string | null {
+  if (Array.isArray(value)) {
+    let best: string | null = null;
+    for (const item of value) {
+      const found = longestArticleBody(item);
+      if (found !== null && (best === null || found.length > best.length)) best = found;
+    }
+    return best;
+  }
+  if (value === null || typeof value !== 'object') return null;
+
+  let best: string | null = null;
+  for (const [key, child] of Object.entries(value)) {
+    const found =
+      key === 'articleBody' && typeof child === 'string' ? child : longestArticleBody(child);
+    if (found !== null && (best === null || found.length > best.length)) best = found;
+  }
+  return best;
+}
+
+/**
+ * What is actually in the page the publisher sent?
+ *
+ * A 200 with 183 KB of HTML and a 300-character extraction has two very different
+ * explanations, and the difference decides whether anything can be done about it. Either
+ * the article is genuinely not there — fetched by script after load, which is the
+ * ceiling `docs/EXTRACTION.md` describes — or it *is* there, in a form Readability does
+ * not read: a JSON-LD `articleBody`, or a framework's hydration payload. The second is a
+ * publisher-agnostic extraction improvement waiting to be made; the first is not fixable
+ * at all. Guessing between them wastes an afternoon, so count instead.
+ *
+ * Signals only, no publisher names: paragraph markup, JSON-LD, and the two hydration
+ * shapes common enough to be worth naming (`__NEXT_DATA__`, streamed `self.__next_f`).
+ */
+function describeRaw(html: string): void {
+  const paragraphs = (html.match(/<p[\s>]/gi) ?? []).length;
+  const scriptBytes = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)].reduce(
+    (total, m) => total + (m[1]?.length ?? 0),
+    0,
+  );
+
+  console.log(`  ${BOLD}what the page contains${OFF}`);
+  console.log(
+    `    ${n(paragraphs)} <p> element(s), ${kb(scriptBytes)} of inline script ` +
+      `${DIM}(${Math.round((scriptBytes / Math.max(html.length, 1)) * 100)}% of the page)${OFF}`,
+  );
+
+  const blocks = [
+    ...html.matchAll(
+      /<script\b[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi,
+    ),
+  ];
+  let body: string | null = null;
+  let unparseable = 0;
+  for (const block of blocks) {
+    try {
+      const found = longestArticleBody(JSON.parse(block[1] ?? ''));
+      if (found !== null && (body === null || found.length > body.length)) body = found;
+    } catch {
+      unparseable += 1;
+    }
+  }
+  const ldNote = unparseable > 0 ? ` ${DIM}(${unparseable} did not parse)${OFF}` : '';
+  if (body !== null) {
+    console.log(
+      `    ${GREEN}JSON-LD articleBody present${OFF}: ${n(body.length)} chars ` +
+        `in ${blocks.length} ld+json block(s)${ldNote}`,
+    );
+    console.log(`    ${DIM}${body.slice(0, 200).replace(/\s+/g, ' ')}…${OFF}`);
+  } else {
+    console.log(`    ${blocks.length} ld+json block(s), no articleBody in any${ldNote}`);
+  }
+
+  const hydration: string[] = [];
+  if (html.includes('__NEXT_DATA__')) hydration.push('__NEXT_DATA__');
+  if (html.includes('self.__next_f')) hydration.push('self.__next_f (streamed)');
+  console.log(
+    hydration.length > 0
+      ? `    hydration payload: ${hydration.join(', ')}`
+      : `    no recognised hydration payload`,
+  );
 }
 
 /** A refusal the publisher issued deliberately, rather than a transport failure. */
@@ -212,6 +300,11 @@ async function main(): Promise<number> {
     const result = extractFromHtml(html, target.toString());
     report('from file', result);
     console.log('');
+    // The same census as raw mode, because this is the other half of the same workflow:
+    // a page the deployment cannot reach gets saved from a browser and reduced here, and
+    // "why is the extraction short" is the question either way.
+    describeRaw(html);
+    console.log('');
     if (result.ok) {
       console.log(
         `  ${DIM}${result.title ?? '(no title)'}${result.byline !== null ? ` — ${result.byline}` : ''}${OFF}`,
@@ -245,6 +338,35 @@ async function main(): Promise<number> {
     );
   }
   console.log('');
+
+  /*
+   * Raw mode: one fetch, no extraction, the bytes written out untouched.
+   *
+   * Deliberately its own mode rather than a side effect of the normal run. The question
+   * it answers — is the article in what the server sent? — is about the response, and
+   * mixing it into a run that fetches twice would leave it ambiguous which response was
+   * saved. It replays the session when there is one, because the interesting page is
+   * almost always the signed-in one.
+   */
+  if (args.raw !== null) {
+    const response = await guardedFetch(target.toString(), {
+      cookie,
+      ...userAgentOption(args),
+    });
+    await writeFile(args.raw, response.body, 'utf8');
+    console.log(
+      `  ${BOLD}${'raw fetch'.padEnd(18)}${OFF}HTTP ${response.status}  ` +
+        `${kb(response.bytes)}  ${response.redirects} redirect(s)`,
+    );
+    console.log(`${' '.repeat(20)}${DIM}final URL: ${response.url}${OFF}`);
+    if (response.truncatedAtCap)
+      console.log(`${' '.repeat(20)}${YELLOW}stopped at the size cap — the page is larger${OFF}`);
+    console.log(`${' '.repeat(20)}${DIM}wrote ${args.raw}${OFF}`);
+    console.log('');
+    describeRaw(response.body);
+    console.log('');
+    return response.status >= 200 && response.status < 300 ? 0 : 1;
+  }
 
   let anon: ExtractResult | null = null;
   let auth: ExtractResult | null = null;

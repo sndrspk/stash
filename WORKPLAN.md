@@ -1053,6 +1053,41 @@ page — which is what a reader actually does — is what fires the event. Both 
 are now `networkMode: 'always'`, which is not a workaround but an accurate description of what they
 depend on: IndexedDB.
 
+### A short extraction has two explanations, and the probe now tells them apart
+
+The signed-in probe against knack.be came back **HTTP 200, 183 KB of HTML, 332 characters
+extracted**, with the real title and byline and then a subscription pitch. The obvious
+reading is the ceiling `docs/EXTRACTION.md` describes: a page that builds its body with
+JavaScript, which no cookie reaches.
+
+It is not the only reading, and the difference matters because one of them is fixable.
+183 KB is a great deal of HTML for a page with no article in it. Readability scores
+markup and has no opinion whatsoever about a `<script>`, so an article sitting in a
+JSON-LD `articleBody` or a framework's hydration payload is *present in the file and
+invisible to the extractor* — and from the outside that looks exactly like an article
+that was never sent. Same status, same byte count, same tiny extraction.
+
+Three signs also said the session was working rather than failing: 183 KB against 13 KB
+anonymous, no redirect to the SSO host, and a real byline. So "the cookies did nothing"
+was not what the numbers showed either.
+
+`npm run probe -- <url> --raw page.html` settles it instead of arguing about it. One
+fetch, replaying a stored session when there is one, the bytes written out untouched, and
+a census of what is in them: `<p>` count, how much of the page is inline script, whether
+any `ld+json` block carries an `articleBody` and how long it is, and whether a recognised
+hydration payload (`__NEXT_DATA__`, streamed `self.__next_f`) is there. `--file` prints
+the same census, because a page saved from a browser is the other half of the same
+workflow — that is the path for an article the deployment cannot reach at all.
+
+It is deliberately its own mode rather than a flag on the normal run, which fetches twice:
+"which response did it save?" is not a question the output should leave open.
+
+The census counts signals, never publishers — `articleBody` is a schema.org field, not a
+site's markup, so a fix built on finding one works for every publisher that emits one and
+rots for none. Which is the point of running the instrument before writing the extractor:
+the last two rounds here were spent on a hypothesis stated more confidently than the
+evidence carried, and this one costs a single command to be right or wrong about.
+
 ### The User-Agent was not the reason, and the probe said so in one command
 
 The section below was written from the code and from how bot protection is known to
