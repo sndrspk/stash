@@ -1088,6 +1088,22 @@ rots for none. Which is the point of running the instrument before writing the e
 the last two rounds here were spent on a hypothesis stated more confidently than the
 evidence carried, and this one costs a single command to be right or wrong about.
 
+**And the first census was not enough, which the first real run showed immediately.**
+knack.be came back with no `articleBody`, no hydration payload, and only 19% of the file
+inline script — leaving ~148 KB that is neither script nor accounted for. That
+combination reads like a verdict and is not one. Navigation, menus and footers are markup
+too, so a page can be four-fifths markup and hold no article whatsoever; the census could
+say what was *absent* and had no way to say what those bytes actually were.
+
+So it now counts visible prose — script and style stripped — against what the extractor
+found, per container rather than as a total. A total cannot tell one long article from
+forty teaser cards, and on a publisher's front-page-shaped article template those look
+identical. An element with at least two direct `<p>` children is precisely what
+Readability scores, so the fattest few name the container it should have picked, with
+enough of a selector to find it in the file by eye. A fat top container beside a thin
+extraction is a scoring miss and fixable; a thin top container is the ceiling. That is the
+distinction three rounds of reasoning could not make and one column of numbers does.
+
 ### The User-Agent was not the reason, and the probe said so in one command
 
 The section below was written from the code and from how bot protection is known to

@@ -175,9 +175,33 @@ reports what is in them: `<p>` elements, how much of the page is inline script, 
 hydration payload is there. `--file page.html` prints the same census for a page saved from a
 browser, which is the path for an article the deployment cannot reach at all.
 
-An `articleBody` present but unused is a **fixable** gap and a publisher-agnostic one: it is a
-schema.org field, not a site's markup. No `articleBody`, little paragraph markup, and most of the
-page in script is the ceiling — genuinely not there, and no extractor reaches it.
+Then the number that actually decides it — how much **visible prose** the document holds, script and
+style stripped, against how much the extractor found, broken down by container:
+
+```
+    401 chars of visible text in the document (extractor found 381)
+    fattest paragraph containers:
+        379 chars in 3 <p>  article#main.Article_body__x9.wrapper
+         16 chars in 2 <p>  nav
+```
+
+Per container rather than as a total, because a total cannot tell one long article from forty
+teasers and those look identical until you see the shape. An element with at least two direct `<p>`
+children is what Readability itself scores, so the top row names the container it *should* have
+picked — with enough of a selector to find it in the file by eye.
+
+Reading the result:
+
+- **An `articleBody` present but unused** is a fixable gap and a publisher-agnostic one: it is a
+  schema.org field, not a site's markup.
+- **A fat top container and a thin extraction** means the article was sent and Readability scored
+  the wrong element. Also fixable, and the selector says where to look.
+- **A thin top container** — a few hundred characters, matching the extraction — is the ceiling.
+  The article genuinely was not in the response, and no extractor reaches it.
+
+Beware the intermediate reading that looks like the third and is not: *most of the page is markup*
+proves nothing on its own. Navigation, menus and footers are markup too, so a page can be 80% markup
+and hold no article at all. Only the prose count separates them.
 
 ## A note on posture
 
