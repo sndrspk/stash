@@ -12,6 +12,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { sessionRecognised, summarize } from '../scripts/probe.js';
 import type { ExtractResult } from '../src/lib/extract.js';
+import { USER_AGENT } from '../src/lib/fetch-guard.js';
 
 function success(overrides: Partial<Extract<ExtractResult, { ok: true }>> = {}) {
   const text = overrides.text ?? 'a'.repeat(4000);
@@ -39,13 +40,17 @@ const failure = (tag: string): ExtractResult => ({
 });
 
 /** Run `summarize` and return everything it printed, ANSI codes and all. */
-function verdictFor(anon: ExtractResult | null, auth: ExtractResult | null): string {
+function verdictFor(
+  anon: ExtractResult | null,
+  auth: ExtractResult | null,
+  userAgent?: string,
+): string {
   const lines: string[] = [];
   const spy = vi.spyOn(console, 'log').mockImplementation((...args: unknown[]) => {
     lines.push(args.map(String).join(' '));
   });
   try {
-    summarize('example.com', anon, auth);
+    summarize('example.com', anon, auth, userAgent);
   } finally {
     spy.mockRestore();
   }
@@ -132,5 +137,26 @@ describe('summarize', () => {
   it('still reports a refusal both ways', () => {
     const verdict = verdictFor(failure('HTTP 403'), failure('HTTP 403'));
     expect(verdict).toContain('Refused both ways');
+  });
+
+  /*
+   * The refusal hint printed one fixed paragraph advising a browser User-Agent, and
+   * printed it verbatim to a run that had just been given one with `--ua`. Advice to try
+   * what you have already tried reads as though the tool looked and found nothing
+   * changed, when it never looked at all.
+   */
+  it('suggests a browser User-Agent only when the honest default went out', () => {
+    const verdict = verdictFor(failure('HTTP 403'), failure('HTTP 403'), USER_AGENT);
+    expect(verdict).toContain('Stash/0.1');
+    expect(verdict).toContain('--ua');
+  });
+
+  it('does not suggest a browser User-Agent when one was already sent', () => {
+    const chrome =
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36';
+    const verdict = verdictFor(failure('HTTP 403'), failure('HTTP 403'), chrome);
+    expect(verdict).not.toContain('Stash/0.1');
+    expect(verdict).toContain('already sent');
+    expect(verdict).toContain('not about how the');
   });
 });

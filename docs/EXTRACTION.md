@@ -146,7 +146,14 @@ path parses HTML; it has no JavaScript engine.
 - **JavaScript-rendered paywalls.** If the body is fetched or decrypted by client-side script after
   load, the HTML genuinely does not contain it. Shows up as a 200 with a large body and a tiny
   extraction.
-- **Anti-bot challenges.** Same root cause — a challenge page needs a browser to answer it.
+- **Anti-bot challenges.** Same root cause — a challenge page needs a browser to answer it. A
+  stored session does not help even when it contains the challenge's own clearance cookie:
+  those are issued against the address *and* the User-Agent that earned them, so replaying one
+  from anywhere else presents a token that does not match the request carrying it. A deployment
+  can therefore never satisfy a challenge the reader's browser passed, whatever is in the store.
+  This was reached the slow way — a 403 that survived a browser User-Agent, and then survived
+  being run from the reader's own laptop, which is what ruled out both the User-Agent and the
+  datacentre address in turn.
 - **Token-bearer APIs.** Sites authenticating internal content endpoints with OAuth need per-site
   reverse engineering, which is the thing this design exists to avoid.
 

@@ -20,7 +20,7 @@
  * build and waits for the reader to accept it, so "I merged it" and "I am running it"
  * are different claims, and there was no way to tell them apart from the screen.
  */
-export const APP_VERSION = 35;
+export const APP_VERSION = 36;
 
-/** As shown: `v35`. */
+/** As shown: `v36`. */
 export const versionLabel = (version: number = APP_VERSION): string => `v${String(version)}`;

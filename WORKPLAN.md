@@ -1122,7 +1122,26 @@ not a proof. Searching the file for a phrase only the real article contains cost
 command and closes it. Absence of the signals you thought to look for is not absence of
 the thing.
 
-### Two verdicts the probe was giving wrongly
+### The datacentre address was not it either
+
+De Standaard refused the deployment with a 403, which is exactly what the address
+hypothesis predicted. Then the probe refused the same URL from the reader's own laptop —
+same connection their browser uses, same browser User-Agent, session sent, **403 both
+anonymously and authenticated.** So the hypothesis is dead, and with it the idea that
+anything about *where* the request comes from is the barrier.
+
+What the run did surface was the cookie list, which reads `cf_clearance`, `__cf_bm`,
+`cf_clearance` again — a challenge-based bot protection. That reframes the problem rather
+than solving it, and the reframing is worth writing down because it is structural: a
+clearance cookie is issued against the address *and* the User-Agent that earned it. A
+deployment has neither. So no amount of session pasting can ever get a serverless function
+past a challenge the reader's browser passed, and this is not a gap to be closed later —
+it is the same ceiling as the JavaScript case, reached from a different direction.
+
+Whether the remaining refusal is that binding or a TLS fingerprint is not yet settled, and
+both lead to the same place for a deployment. Stated as open rather than resolved.
+
+### Three verdicts the probe was giving wrongly
 
 Both found by running it rather than reading it, which is the pattern this file keeps
 recording.
@@ -1143,6 +1162,19 @@ difference *and the number behind it*, so the verdict says "the session is being
 and the article still isn't here" with `183 KB of HTML against 13 KB anonymous` beside it —
 checkable rather than taken on trust. Where there is no such evidence it says so, and
 guesses expiry first, which is the cheap thing to rule out.
+
+**"Stash sends an honest `Stash/0.1` User-Agent."** Printed verbatim to a run that had
+just been given a browser string with `--ua`, advising the reader to try the thing they
+had that moment tried. Worse than no advice: it reads as though the tool inspected the run
+and found nothing had changed, when it never looked. The hint now takes the User-Agent that
+actually went out, and where a browser string was already sent it says what that rules out
+instead — the refusal is not about how the request introduces itself.
+
+All three are the same mistake in three costumes: a sentence asserting more than the data
+under it. `test/probe-verdict.test.ts` drives `summarize` with the result shapes that
+produced each one and asserts on what it prints, which is the only way this class of bug
+gets caught — every one of them was found by a reader running the tool, never by reading
+the code.
 
 ### The User-Agent was not the reason, and the probe said so in one command
 

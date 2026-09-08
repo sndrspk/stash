@@ -26,7 +26,7 @@ import { pathToFileURL } from 'node:url';
 import { cookieHeaderFor, cookieNames } from '../src/lib/cookies.js';
 import { parseHTML } from 'linkedom';
 import { extract, extractFromHtml, type ExtractResult } from '../src/lib/extract.js';
-import { guardedFetch } from '../src/lib/fetch-guard.js';
+import { configuredUserAgent, guardedFetch, USER_AGENT } from '../src/lib/fetch-guard.js';
 import {
   DEFAULT_STORE_PATHS,
   loadSessionStore,
@@ -271,14 +271,36 @@ function addSessionHint(host: string): void {
   console.log(`    ${DIM}npm run session -- add ${host}${OFF}   ${DIM}(see SESSIONS.md)${OFF}`);
 }
 
-function botProtectionHint(): void {
+/**
+ * What to try after a refusal — which depends entirely on what was already tried.
+ *
+ * This used to print one fixed paragraph advising a browser User-Agent, and printed it
+ * verbatim to a run that had *just* been given one with `--ua`. Advice to try the thing
+ * you have already done is worse than no advice: it reads as though the tool inspected
+ * the run and concluded nothing had changed, when in fact it never looked.
+ *
+ * So it takes the User-Agent that actually went out. With the honest default there is a
+ * cheap thing left to try and a posture decision attached to it; with a browser string
+ * already sent, the refusal is not about how the request introduces itself, and saying so
+ * is the useful half.
+ */
+function botProtectionHint(userAgent: string): void {
   console.log(`    This is the anti-bot case in docs/EXTRACTION.md: a challenge page needs a`);
-  console.log(`    browser to answer it, and no cookie will substitute. Stash sends an honest`);
-  console.log(
-    `    ${DIM}Stash/0.1${OFF} User-Agent; some publishers refuse anything that isn't a browser.`,
-  );
-  console.log(`    Claiming to be one is a deliberate choice, not a default — see the posture`);
-  console.log(`    note at the end of docs/EXTRACTION.md before changing it.`);
+  console.log(`    browser to answer it, and no cookie will substitute.`);
+  if (userAgent === USER_AGENT) {
+    console.log(
+      `    Stash sent its honest ${DIM}Stash/0.1${OFF} User-Agent, and some publishers refuse`,
+    );
+    console.log(`    anything that isn't browser-shaped. Trying a browser string is a deliberate`);
+    console.log(`    choice, not a default — see the posture note at the end of`);
+    console.log(`    docs/EXTRACTION.md before making it: ${DIM}--ua "<string>"${OFF}`);
+    return;
+  }
+  console.log(`    A browser User-Agent was already sent, so this refusal is not about how the`);
+  console.log(`    request introduces itself. Something else about it is being read — the TLS`);
+  console.log(`    handshake and the header set both differ from a real browser's, and neither`);
+  console.log(`    is something a fetch can dress up. A clearance cookie will not carry either:`);
+  console.log(`    those are issued against the address and the User-Agent that earned them.`);
 }
 
 /**
@@ -317,6 +339,7 @@ export function summarize(
   host: string,
   anon: ExtractResult | null,
   auth: ExtractResult | null,
+  userAgent: string = USER_AGENT,
 ): void {
   const anonChars = anon?.ok === true ? anon.text.length : 0;
   const authChars = auth?.ok === true ? auth.text.length : 0;
@@ -325,7 +348,7 @@ export function summarize(
   if (anon !== null && auth !== null) {
     if (isRefusal(anon) && isRefusal(auth)) {
       console.log(`  ${RED}→ Refused both ways.${OFF}`);
-      botProtectionHint();
+      botProtectionHint(userAgent);
       return;
     }
     /*
@@ -511,7 +534,7 @@ async function main(): Promise<number> {
 
   console.log('');
 
-  summarize(target.hostname, anon, auth);
+  summarize(target.hostname, anon, auth, args.userAgent ?? configuredUserAgent());
 
   const best = auth?.ok === true ? auth : anon?.ok === true ? anon : null;
 

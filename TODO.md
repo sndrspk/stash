@@ -77,27 +77,25 @@ Both are the same root seen from two ends, which is why neither has been fixed p
 
 ## Waiting on you to try it
 
-- [ ] **Why does the deployment get 403 where a laptop gets 200?** The probe reaches
-      knack.be with a browser User-Agent and *no* session, gets 200, and is redirected to the
-      publisher's SSO login — so the User-Agent was never the barrier and the extraction path
-      works. The deployment, same URL, refuses.
+- [ ] **What is refusing us with a 403, now that the two obvious answers are out?** Both
+      hypotheses are dead, each disproved by one command:
 
-      The remaining difference is where the request comes from: a serverless function in a
-      datacentre versus a home connection, and datacentre ranges are routinely refused where a
-      residential address is not. **A hypothesis, not a diagnosis.**
+      - **Not the User-Agent.** knack.be answers 200 to `Stash/0.1` and redirects it to SSO.
+      - **Not the datacentre address.** De Standaard refuses the *laptop* too — same
+        connection the browser uses, browser User-Agent, session sent, 403 anonymously and
+        authenticated alike.
 
-      **The laptop half has now been done.** With the session stored locally, knack.be answers
-      200 and honours it — no SSO redirect, 183 KB against 13 KB anonymous, real title and
-      byline. So the fetch path works end to end from a home connection, and the difference is
-      the deployment rather than anything in the code. That leaves the address hypothesis
-      standing but still untested.
+      What the run did surface is the cookie list: `cf_clearance`, `__cf_bm`. That is
+      challenge-based bot protection, and it carries a **structural** consequence worth
+      knowing before any more effort goes in — a clearance cookie is issued against the
+      address *and* the User-Agent that earned it, so a deployment can never satisfy a
+      challenge the reader's browser passed, whatever is in the session store.
 
-      One cheap test remains: fetch the same URL from any cloud shell with the same
-      User-Agent. A 403 there confirms it is where the request comes from, and no header fixes
-      that — the honest answer is then the ceiling `docs/EXTRACTION.md` describes, with the
-      origin link in the reading bar as the fallback. Worth doing for the publishers that are
-      *not* knack, since knack turns out to be a ceiling regardless.
-      → [WORKPLAN](WORKPLAN.md#the-user-agent-was-not-the-reason-and-the-probe-said-so-in-one-command)
+      One cheap test is left, and it decides only how far the ceiling extends rather than
+      whether there is one: re-run with the **exact** `navigator.userAgent` of the browser
+      that holds the session. 200 means the binding is the whole story. Still 403 means
+      something unfakeable is being fingerprinted, most likely the TLS handshake.
+      → [WORKPLAN](WORKPLAN.md#the-datacentre-address-was-not-it-either)
 - [x] ~~**Is a short extraction a missing article, or one Readability could not see?**~~
       **Answered, and knack.be is closed.** `--raw` counts what the publisher sent: 183 KB of
       HTML, **3,368 characters of visible text**, and the two fattest paragraph containers are
