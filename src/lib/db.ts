@@ -9,10 +9,10 @@
  * data — not defensive complexity here.
  *
  * The one exception is `image_cache`, which is expensive to rebuild across hundreds
- * of third-party sites, and which the architecture gives a server-side copy
- * alongside the local one. That copy waits for the KV store in Phase 7b rather than
- * standing one up here: until then the cache is per-device, which costs a
- * re-resolution on a new device and nothing else.
+ * of third-party sites. The architecture once planned a shared server-side copy in a
+ * KV store; that store existed for publisher sessions and went with them, and nothing
+ * now justifies standing one up for images alone. The cache is per-device, which costs
+ * a re-resolution on a new device and nothing else.
  */
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 
@@ -26,10 +26,9 @@ export const PURGE_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
 /**
  * How long a failed image lookup is left alone before it may be tried again.
  *
- * A week, which is the interval `docs/EXTRACTION.md` settled on for retrying a
- * failed URL, and for the same reason: without it, every sync re-attempts every site
- * that was down once, and a first sync's failures become a standing tax paid by
- * whoever's server was unlucky that afternoon.
+ * A week. Without it, every sync re-attempts every site that was down once, and a
+ * first sync's failures become a standing tax paid by whoever's server was unlucky
+ * that afternoon.
  */
 export const IMAGE_RETRY_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -63,13 +62,15 @@ export interface BookmarkRecord {
 }
 
 /**
- * Article text, stored **beside** rather than over.
+ * Article text, keyed by bookmark **and source**.
  *
- * Both sources coexist so that a bad extraction never destroys what Instapaper
- * returned, and so settings can offer "show original" for free. The key is
- * therefore composite — one row per bookmark per source.
+ * The union has one member now. It stays a union, and the key stays composite,
+ * because devices that ran an earlier build hold `extracted` rows written when Stash
+ * fetched publisher pages itself. A composite key is what lets those sit inertly
+ * beside the Instapaper rows instead of colliding with them; collapsing the schema
+ * would turn an upgrade into a data migration for no gain a reader would notice.
  */
-export type TextSource = 'instapaper' | 'extracted';
+export type TextSource = 'instapaper';
 
 export interface ArticleTextRecord {
   /** `${bookmark_id}:${source}`. */
@@ -82,13 +83,9 @@ export interface ArticleTextRecord {
   /**
    * Whether a publisher session was replayed to obtain this copy.
    *
-   * Only ever set on an `extracted` row, and optional because rows written before it
-   * existed have no answer — which is why the reading view says nothing rather than
-   * saying "anonymously" about a fetch it cannot speak for. Absent is not false.
-   *
-   * Stored rather than kept in memory: the question it answers — did my session do
-   * the work? — is asked days later, by someone comparing our copy against the
-   * publisher's page, not in the second after the fetch.
+   * Never written any more — it recorded something about Stash's own fetching, which
+   * no longer exists. Kept as an optional field so rows already on a reader's device
+   * still satisfy the type when they are read back.
    */
   authenticated?: boolean;
 }

@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { CacheSettings } from '../components/CacheSettings';
-import { SiteSessions } from '../components/SiteSessions';
 import { TO_UNLOCK, classifyStatusResponse, type Status } from '../lib/status-view';
 import styles from './Settings.module.css';
 
@@ -88,11 +87,6 @@ export function Settings() {
           way to do it from here — the deployed app has no path that writes credentials, and never
           sees your password.
         </p>
-      </section>
-
-      <section className={styles.section}>
-        <h2 className={styles.heading}>Publisher sessions</h2>
-        <SiteSessions />
       </section>
 
       <section className={styles.section}>

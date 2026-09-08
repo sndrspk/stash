@@ -47,7 +47,6 @@ async function fill() {
   for (const id of [1, 2, 3]) await db.put('bookmarks', bookmark(id));
 
   await writeText(1, 'instapaper', '<p>One.</p>', NOW);
-  await writeText(1, 'extracted', '<p>One, extracted.</p>', NOW);
   await writeText(2, 'instapaper', '<p>Two.</p>', NOW);
 
   await writeImage({
@@ -63,12 +62,12 @@ async function fill() {
 }
 
 describe('readCacheUsage', () => {
-  it('counts each store, with both text sources counted separately', async () => {
+  it('counts each store', async () => {
     await fill();
 
     expect(await readCacheUsage()).toMatchObject({
       bookmarks: 3,
-      texts: 3,
+      texts: 2,
       images: 1,
       pending: 1,
     });
@@ -97,7 +96,7 @@ describe('clearCache', () => {
   it('drops the text and the images, and says how much', async () => {
     await fill();
 
-    expect(await clearCache()).toEqual({ texts: 3, images: 1 });
+    expect(await clearCache()).toEqual({ texts: 2, images: 1 });
 
     const after = await readCacheUsage();
     expect(after.texts).toBe(0);

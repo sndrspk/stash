@@ -1104,6 +1104,78 @@ enough of a selector to find it in the file by eye. A fat top container beside a
 extraction is a scoring miss and fixable; a thin top container is the ceiling. That is the
 distinction three rounds of reasoning could not make and one column of numbers does.
 
+**The answer for knack.be is the ceiling.** 183 KB of HTML, 3,368 characters of visible
+text, and the two fattest paragraph containers are `div.c-paywall__header` (140 chars) and
+`div.c-paywall__content` (25). There is no third. A distinctive phrase from the middle of
+the article, taken from the browser where it renders perfectly well, appears zero times in
+the file.
+
+So the session works and is not the problem: it buys the *signed-in shell* rather than the
+login page — no SSO redirect, 183 KB against 13 KB anonymous, real title and byline — and
+the body is fetched by script after that. Case one in `docs/EXTRACTION.md`, and out of
+reach for anything without a JavaScript engine. Nothing further to try for this publisher.
+
+The grep is the part worth keeping as method. The census said "no `articleBody`, no
+recognised hydration payload", but it had only looked for two named payload shapes and 35
+KB of inline script remained unaccounted for — so "not there" was a strong inference and
+not a proof. Searching the file for a phrase only the real article contains costs one
+command and closes it. Absence of the signals you thought to look for is not absence of
+the thing.
+
+### The datacentre address was not it either
+
+De Standaard refused the deployment with a 403, which is exactly what the address
+hypothesis predicted. Then the probe refused the same URL from the reader's own laptop —
+same connection their browser uses, same browser User-Agent, session sent, **403 both
+anonymously and authenticated.** So the hypothesis is dead, and with it the idea that
+anything about *where* the request comes from is the barrier.
+
+What the run did surface was the cookie list, which reads `cf_clearance`, `__cf_bm`,
+`cf_clearance` again — a challenge-based bot protection. That reframes the problem rather
+than solving it, and the reframing is worth writing down because it is structural: a
+clearance cookie is issued against the address *and* the User-Agent that earned it. A
+deployment has neither. So no amount of session pasting can ever get a serverless function
+past a challenge the reader's browser passed, and this is not a gap to be closed later —
+it is the same ceiling as the JavaScript case, reached from a different direction.
+
+Whether the remaining refusal is that binding or a TLS fingerprint is not yet settled, and
+both lead to the same place for a deployment. Stated as open rather than resolved.
+
+### Three verdicts the probe was giving wrongly
+
+Both found by running it rather than reading it, which is the pattern this file keeps
+recording.
+
+**"The session is doing the work here — 332 more characters."** The test was `authChars >
+anonChars * 1.5`, with no reference to the truncation verdict the same result carries. Once
+`reachedSameSite` started failing the anonymous fetch, `anonChars` became 0, and any
+authenticated result at all beat it — so a subscription pitch was announced as a success in
+green. Now gated on the extraction not being truncated, which is the thing the sentence was
+always claiming.
+
+**"Either it has expired, or this page builds its body with JavaScript."** Offered two
+explanations as though nothing on hand could separate them, when both results carry the
+evidence: a publisher that does not recognise a session redirects the anonymous visitor to
+a login host and serves everyone the same page; one that does skips the redirect and serves
+markedly more HTML, even while withholding the article. `sessionRecognised` reports that
+difference *and the number behind it*, so the verdict says "the session is being honoured,
+and the article still isn't here" with `183 KB of HTML against 13 KB anonymous` beside it —
+checkable rather than taken on trust. Where there is no such evidence it says so, and
+guesses expiry first, which is the cheap thing to rule out.
+
+**"Stash sends an honest `Stash/0.1` User-Agent."** Printed verbatim to a run that had
+just been given a browser string with `--ua`, advising the reader to try the thing they
+had that moment tried. Worse than no advice: it reads as though the tool inspected the run
+and found nothing had changed, when it never looked. The hint now takes the User-Agent that
+actually went out, and where a browser string was already sent it says what that rules out
+instead — the refusal is not about how the request introduces itself.
+
+All three are the same mistake in three costumes: a sentence asserting more than the data
+under it. `test/probe-verdict.test.ts` drives `summarize` with the result shapes that
+produced each one and asserts on what it prints, which is the only way this class of bug
+gets caught — every one of them was found by a reader running the tool, never by reading
+the code.
+
 ### The User-Agent was not the reason, and the probe said so in one command
 
 The section below was written from the code and from how bot protection is known to
@@ -1453,6 +1525,76 @@ Two things are worth carrying forward from it:
   it exists to prevent — `module-resolution.test.ts` had the same flaw latent in it — so both now
   strip comments before matching. A scanner that reads prose as code makes documenting a rule break
   the rule.
+
+
+### Removing Stash's own fetching
+
+Phase 7 is gone. Not disabled, not left behind a flag — removed: `api/extract`,
+`api/sessions`, the cleaners, the cookie jar, the encrypted KV store, the session store,
+the probe, and the two dependencies that existed only to serve them —
+`@mozilla/readability` and `ioredis`. Stash reads Instapaper's `get_text` and renders what
+it returns.
+
+The case for building it was that Instapaper gives up on some pages, and that a reader
+with a paid subscription should be able to replay their own session to get the article
+they already pay for. That case was sound, and the thing worked: sessions were stored
+encrypted, replayed correctly, and the whole path ran end to end.
+
+What it did not do was help. Two publishers were tested seriously, both from the reader's
+own queue, and each turned out to be a ceiling rather than a bug:
+
+- **knack.be** honours the session — no SSO redirect, 183 KB against 13 KB anonymous, real
+  title and byline — and then sends a page with 3,368 characters of visible text whose
+  fattest paragraph containers are a paywall header and a paywall body. A distinctive
+  phrase from the middle of the article appears zero times in the file. The body arrives by
+  script afterwards.
+- **standaard.be** refuses with 403 before any cookie is read, and refuses the reader's own
+  laptop identically — same connection their browser uses, same browser User-Agent. Its
+  cookie jar carries `cf_clearance` and `__cf_bm`, and a clearance cookie is issued against
+  the address *and* the User-Agent that earned it, so a deployment can never present a valid
+  one.
+
+Against that: **not one confirmed case where our extraction beat Instapaper's on an article
+actually being read.** The standfirst recovery, which is the strongest non-paywall argument
+for keeping it, was built for and tested on a paywalled article. The soft-paywall benefit is
+real in principle and was never observed here.
+
+So the honest position was that a whole subsystem — a serverless function, a KV store, an
+encryption key, a session-paste flow, 470 KiB of parser that had to be actively kept out of
+the client bundle, and four environment variables — was carrying a benefit nobody had
+measured. Offered the choice between measuring it first and removing it, the reader chose to
+remove it. That is the right call to be theirs: it is their queue, their publishers, and
+they are the one who would have run the measurement.
+
+**What was kept, and why.**
+
+- `src/lib/furniture.ts` — the render-time cleaner. It works on Instapaper's text and always
+  did; it runs at render, so a rule added later cleans everything already cached.
+- `src/lib/fetch-guard.ts` — `api/resolve-image.ts` still fetches article pages for their
+  `og:image`, and every hop still needs its address vetted. This is now the only thing Stash
+  fetches from a publisher, and the politeness rules still apply to it.
+- `linkedom`, which the first pass at this removal deleted and the production build
+  immediately rejected. `src/lib/og-image.ts` parses the fetched page with it to find the
+  `og:image`, so it is a server-side DOM this app still needs — and the client-bundle rule
+  that keeps it out of the browser is still live rather than merely historical.
+- `truncation.ts` — `plainText` for the cleaner, `isTruncated` for the fixtures.
+- The composite `article_text` key, and `TextSource` as a union of one. Devices that ran an
+  earlier build still hold `extracted` rows, and the build that wrote them *preferred* them.
+  `bestOf` now selects the Instapaper row by name, so those are ignored rather than silently
+  rendered — which for the paywalled articles that prompted all this would mean a stored
+  subscription pitch on screen. They are left in place rather than deleted: dropping a
+  reader's stored articles to tidy a schema is the worse trade. `test/store.test.ts` covers
+  both halves.
+
+**What this costs, stated plainly.** An article Instapaper returns as a stub stays a stub,
+and an article it returns complete-but-imperfect stays imperfect — the missing-standfirst
+case is no longer fixable from inside the app. The reading view links out to the publisher's
+page, which is what Instapaper's own interface does and is the honest answer for an article
+we cannot give you.
+
+`docs/EXTRACTION.md` and `SESSIONS.md` are deleted rather than archived. The reasoning that
+was worth keeping is here; the rest was instructions for a feature that no longer exists,
+and stale instructions are worse than none.
 
 ---
 

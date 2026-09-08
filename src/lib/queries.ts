@@ -10,7 +10,6 @@ import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tansta
 
 import { ApiError, apiErrorFrom } from './api-error.js';
 import type { BookmarkRecord } from './db.js';
-import { extractArticle, type ExtractionResult } from './extraction.js';
 import { resolveImages, type ImagePassResult } from './images.js';
 import { flushOnce, type FlushResult } from './pending.js';
 import type { ReadingPrefs } from './prefs.js';
@@ -27,7 +26,6 @@ import {
   readPending,
   readPrefs,
   readTextFor,
-  readTextSources,
   readUnread,
   writePrefs,
 } from './store.js';
@@ -171,42 +169,6 @@ export function useArticleText(id: number) {
     },
     staleTime: Infinity,
     enabled: Number.isInteger(id) && id > 0,
-  });
-}
-
-/**
- * Both stored copies of one article.
- *
- * This is what "store beside, never over" buys: the reading view can offer the
- * original with nothing fetched and nothing lost, because the Instapaper text was
- * never overwritten in the first place.
- */
-export function useArticleSources(id: number) {
-  return useQuery({
-    queryKey: keys.articleSources(id),
-    queryFn: () => readTextSources(id),
-    staleTime: Infinity,
-    enabled: Number.isInteger(id) && id > 0,
-  });
-}
-
-/**
- * Re-extract one article from the publisher's own page.
- *
- * Every gate lives in `extraction.ts`, including the one that matters here: passing
- * `force` is what an explicit "fetch full content" does, and it skips the truncation
- * check, the backoff and the already-extracted check alike.
- */
-export function useExtractArticle() {
-  const client = useQueryClient();
-
-  return useMutation<ExtractionResult, Error, { bookmark: BookmarkRecord; force?: boolean }>({
-    mutationFn: ({ bookmark, force }) => extractArticle(bookmark, { force }),
-    onSuccess: (result, { bookmark }) => {
-      if (result.outcome?.kind === 'extracted') {
-        void client.invalidateQueries({ queryKey: ['article', bookmark.bookmark_id] });
-      }
-    },
   });
 }
 

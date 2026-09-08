@@ -7,8 +7,8 @@
  * are the whole trust boundary.
  *
  * The content is third-party twice over — a publisher's markup, passed through
- * Instapaper's extractor — and Phase 7 will add a third source that is a publisher's
- * page with no extractor in front of it at all. So the rule here is an **allowlist**:
+ * Instapaper's extractor — and arriving through an API we trust does not make any of it
+ * trustworthy. So the rule here is an **allowlist**:
  * anything not named survives only as its text. A denylist would have to anticipate
  * every future way to smuggle script into markup, which is not a game worth playing
  * against a corpus nobody controls.
