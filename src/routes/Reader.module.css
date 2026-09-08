@@ -150,33 +150,6 @@
   font-size: var(--text-sm);
 }
 
-/*
- * The extraction note. Deliberately not `.error`: "the session may have expired" is
- * information about a publisher, not a failure of the app, and a red rule beside it
- * would make an ordinary paywall look like something broke.
- */
-.note {
-  flex: 0 0 auto;
-  padding: var(--space-2) var(--space-4);
-  border-left: 3px solid var(--rule);
-  background: var(--paper-sunken);
-  font-family: var(--font-ui);
-  font-size: var(--text-sm);
-  line-height: var(--leading-relaxed);
-  color: var(--ink-muted);
-}
-
-.link {
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--ink);
-  font: inherit;
-  text-decoration: underline;
-  text-decoration-color: var(--accent);
-  cursor: pointer;
-}
-
 /* --- the article --- */
 
 .viewport {

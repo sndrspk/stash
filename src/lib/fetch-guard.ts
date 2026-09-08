@@ -12,41 +12,15 @@
 import { lookup } from 'node:dns/promises';
 
 /**
- * What this app says it is, by default: an app, saying so, with a link.
+ * What this app says it is: an app, saying so, with a link.
  *
- * The posture note in `docs/EXTRACTION.md` is the authority on why. In short: this
- * fetches pages the reader already has a paid right to read, using a session they
- * established themselves, one article at a time — and it says who it is while doing it.
+ * The only thing that fetches a publisher's page now is `og:image` resolution, for one
+ * article the reader already saved — so the honest introduction costs nothing and is
+ * simply correct. It is not overridable any more: the override existed because most
+ * paywalled publishers refuse a non-browser User-Agent, which mattered when Stash was
+ * trying to read their articles and does not now.
  */
 export const USER_AGENT = 'Stash/0.1 (+https://github.com/sndrspk/stash)';
-
-/**
- * The User-Agent this deployment actually sends.
- *
- * `STASH_USER_AGENT` overrides the honest default, and exists because the honest
- * default does not work everywhere: publishers behind bot protection refuse anything
- * that is not browser-shaped with a 403, before any cookie is looked at, so a reader
- * with a valid paid session is turned away for the User-Agent alone.
- *
- * **Deliberately opt-in, and deliberately not the default.** A deployment is one
- * person's, and the person setting this is deciding how their own reading tool
- * identifies itself to publishers they pay. That is theirs to decide. Baking it into
- * the repository would make it for everyone who forks this, including people who never
- * considered the question — which is the part that would change what this project is
- * rather than what one deployment does.
- *
- * The line the posture note draws is still here and still worth keeping: claiming to be
- * **Googlebot** is circumvention, because publishers serve crawlers text they withhold
- * from readers, and that is taking something not on offer. Claiming to be a browser is
- * a different act — the request is a person's, made with their own credentials, for an
- * article they pay for — but it does defeat a control the publisher chose to deploy,
- * and it is worth being clear-eyed that this is the trade rather than pretending there
- * is none.
- */
-export function configuredUserAgent(env: NodeJS.ProcessEnv = process.env): string {
-  const custom = env.STASH_USER_AGENT?.trim();
-  return custom === undefined || custom === '' ? USER_AGENT : custom;
-}
 
 /** SanFeedBin's numbers: short, because this runs unattended during a sync. */
 export const CONNECT_TIMEOUT_MS = 10_000;
@@ -166,7 +140,6 @@ export interface GuardedFetchOptions {
   timeoutMs?: number;
   maxBytes?: number;
   maxRedirects?: number;
-  userAgent?: string;
 }
 
 /**
@@ -182,7 +155,6 @@ export async function guardedFetch(
     timeoutMs = TOTAL_TIMEOUT_MS,
     maxBytes = MAX_BYTES,
     maxRedirects = MAX_REDIRECTS,
-    userAgent = configuredUserAgent(),
   } = options;
 
   const deadline = Date.now() + timeoutMs;
@@ -197,7 +169,7 @@ export async function guardedFetch(
     if (remaining <= 0) throw new BlockedUrlError('timed out', false);
 
     const headers: Record<string, string> = {
-      'user-agent': userAgent,
+      'user-agent': USER_AGENT,
       accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
       // No language preference of our own: the article is whatever language it is, and
       // claiming English would make a Dutch or French publisher serve a translated or

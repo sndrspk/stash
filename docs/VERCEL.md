@@ -52,13 +52,16 @@ either failure mode fails in CI rather than the next time someone runs `vercel d
 **No CSP yet, deliberately.** Phase 6 injects sanitized third-party article HTML, and a
 policy written before we know what that markup needs is either too tight to render
 articles or so loose it isn't a policy. It goes in with the reading view, informed by what
-`get_text` and our own extraction actually return.
+`get_text` actually returns.
 
 ## Runtime
 
-The functions run on Node, not Edge — Phase 7's extraction path uses `@mozilla/readability`
-with `linkedom`, and the work plan chose Vercel specifically so that pairing works
-directly rather than needing a Workers-compatible reimplementation.
+The functions run on Node, not Edge. The original reason was the extraction path, which
+paired `@mozilla/readability` with `linkedom` and drove the choice of Vercel; that path is
+gone, and two smaller reasons remain. `api/resolve-image.ts` parses the fetched page with
+`linkedom` to find its `og:image` — still a server-side DOM — and it uses `node:dns` to
+resolve every outbound host and refuse the private ranges before connecting, which is the
+SSRF guard and has no Edge equivalent worth trusting.
 
 ## Local parity
 
@@ -118,9 +121,8 @@ the address bar before the code.
 Set as Vercel environment variables, never in the client bundle. Phase 9's deploy step
 verifies none of them reached `dist/` by grepping the built output for the token.
 
-**Five are required for a working deployment.** The rest are for publisher sessions, which
-are optional — extraction runs without them and already handles a good share of soft
-paywalls.
+**Five, and that is the whole list.** There is nothing optional left to set: no key-value
+store, no encryption key, no User-Agent. Stash reads Instapaper and renders what it returns.
 
 | Variable | Missing means |
 | --- | --- |
@@ -130,41 +132,17 @@ paywalls.
 | `INSTAPAPER_OAUTH_TOKEN` | as above |
 | `INSTAPAPER_OAUTH_TOKEN_SECRET` | as above |
 
-### Publisher sessions (optional)
+### Variables that used to matter
 
-Settings → Publisher sessions needs somewhere to put a cookie header and a key to encrypt it
-with. Both, or neither — a store with no key is refused rather than filled with plaintext
-credentials.
+`STASH_ENCRYPTION_KEY`, `STASH_KV_URL` / `_TOKEN`, `KV_REST_API_URL` / `_TOKEN`,
+`UPSTASH_REDIS_*`, `REDIS_URL` / `STASH_REDIS_URL` and `STASH_USER_AGENT` were all read by
+the publisher-session and extraction lane, which was removed
+([`WORKPLAN.md`](../WORKPLAN.md#removing-stashs-own-fetching)). **Nothing reads them now.**
 
-| Variable | Missing means |
-| --- | --- |
-| `KV_REST_API_URL` / `KV_REST_API_TOKEN` | Settings says no store is attached; sessions cannot be saved. Injected automatically when you attach a KV store to the project — `UPSTASH_REDIS_REST_URL` / `_TOKEN` work too, and `STASH_KV_URL` / `STASH_KV_TOKEN` override both. |
-| `REDIS_URL` | The other way in, for managed Redis with no HTTP endpoint. `KV_URL` and `UPSTASH_REDIS_URL` work too, and `STASH_REDIS_URL` overrides them. Only consulted when no HTTP pair is set. |
-| `STASH_ENCRYPTION_KEY` | With a store attached, saving a session answers 503 rather than writing plaintext. Generate one with `openssl rand -base64 32`. |
-| `STASH_USER_AGENT` | The extractor introduces itself as `Stash/0.1 (+repo)`, which most paywalled publishers refuse with 403 before reading a cookie. Setting a browser string gets past that — read the posture section of [`docs/EXTRACTION.md`](EXTRACTION.md) first, because it is a decision about how your reading tool presents itself, not a setting. |
-
-**Either transport works, and you only need one.** Providers hand out two different
-things for the same store: an HTTPS endpoint with a bearer token, and a `redis://`
-connection string for a TCP client. Upstash and Vercel KV give you both; Redis Cloud,
-ElastiCache and a plain Redis server give you only the second.
-
-HTTP is preferred where it exists, and that is not a stylistic choice — it is stateless,
-so there is no connection to go stale while the function's container is frozen and no
-handshake to pay on a cold start. The TCP transport keeps one connection per process and
-reuses it across warm invocations, with a five-second command timeout so a connection
-that died while the container slept surfaces as an error the settings screen can render
-rather than as a request that never returns. When both are configured, HTTP wins.
-
-**Prefer `rediss://` to `redis://`** wherever the provider offers it. That connection
-carries the reader's publisher session cookies.
-
-Settings names the variables it actually found, so read that before changing anything.
-
-Two things follow from where the key lives. **Rotating `STASH_ENCRYPTION_KEY` orphans every
-stored session** — the blobs are cleared on the next read and the settings screen says which
-hosts went, but re-capturing them means walking through every publisher again. And the KV
-store is deliberately separate from the Instapaper token, which is an environment variable
-and is not in the store at all: rotating one must never destroy the other.
+Delete them from the project's environment variables when convenient, and detach the KV
+store — it holds nothing this app will ever read again. `npm run verify:build` still greps
+`dist/` for their values while they remain set, on the grounds that a secret sitting in an
+environment is worth guarding whether or not the code wants it.
 
 **Scope them to Production, not Preview.** Every branch gets a preview URL, and a preview
 carrying live credentials is a second public door to the same Instapaper account. The

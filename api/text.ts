@@ -72,8 +72,9 @@ export async function GET(request: Request): Promise<Response> {
 
   if (result.status === 400) {
     // A real, cacheable answer: Instapaper has no text for this one and will not
-    // acquire any by being asked again. Phase 7's extraction fallback is what
-    // eventually turns this into an article; until then it is an honest empty.
+    // acquire any by being asked again. There is no second source — Stash used to fetch
+    // the publisher's page itself and no longer does — so this is where it ends, and the
+    // reading view offers the origin link instead of an article.
     return json({ bookmark_id: bookmarkId, html: null, reason: 'no_text' }, 200);
   }
   if (result.status < 200 || result.status >= 300) {

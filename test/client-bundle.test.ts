@@ -28,15 +28,21 @@ import { code } from './source-scan';
 const ENTRY = 'src/main.tsx';
 
 /**
- * Packages that mean "this module expects to be on a server".
+ * Specifiers that mean "this module expects to be on a server".
  *
- * `ioredis` is here for a slightly different reason than the parsers: it opens TCP
- * sockets, which a browser cannot do at all, so it would not merely be dead weight in
- * the bundle — it would be a build that fails or a runtime that throws. `src/lib/kv.ts`
- * imports it, and `kv.ts` sits in `src/lib` alongside modules the client does use, so
- * the wrong import is one autocomplete away.
+ * The three packages are no longer installed — they went with Stash's own fetching —
+ * and the entries stay as a guard against reintroduction, which costs nothing and is
+ * the cheaper half of this list.
+ *
+ * `node:` is the half that is still live. `src/lib/fetch-guard.ts` imports
+ * `node:dns/promises` to resolve and vet every outbound address, and it sits in
+ * `src/lib` alongside modules the client uses every render, so the wrong import is one
+ * autocomplete away — and it would be a build that fails or a runtime that throws
+ * rather than merely dead weight. The prefix catches every builtin at once, which is
+ * the right shape here: the rule is "the client has no Node", not "the client has no
+ * DNS".
  */
-const SERVER_ONLY = ['linkedom', '@mozilla/readability', 'ioredis'];
+const SERVER_ONLY = ['linkedom', '@mozilla/readability', 'ioredis', 'node:'];
 
 const EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx'];
 
@@ -91,8 +97,12 @@ function walk(entry: string): { found: Reach[]; visited: Set<string> } {
       }
 
       // A bare specifier: the package itself, or a subpath of it.
-      const owner = SERVER_ONLY.find(
-        (name) => specifier === name || specifier.startsWith(`${name}/`),
+      const owner = SERVER_ONLY.find((name) =>
+        // `node:` is a prefix rather than a package name, so it matches on its own
+        // terms; the rest match exactly or as a subpath.
+        name.endsWith(':')
+          ? specifier.startsWith(name)
+          : specifier === name || specifier.startsWith(`${name}/`),
       );
       if (owner !== undefined) found.push({ path: here, package: owner });
     }

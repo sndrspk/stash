@@ -1526,6 +1526,76 @@ Two things are worth carrying forward from it:
   strip comments before matching. A scanner that reads prose as code makes documenting a rule break
   the rule.
 
+
+### Removing Stash's own fetching
+
+Phase 7 is gone. Not disabled, not left behind a flag — removed: `api/extract`,
+`api/sessions`, the cleaners, the cookie jar, the encrypted KV store, the session store,
+the probe, and the two dependencies that existed only to serve them —
+`@mozilla/readability` and `ioredis`. Stash reads Instapaper's `get_text` and renders what
+it returns.
+
+The case for building it was that Instapaper gives up on some pages, and that a reader
+with a paid subscription should be able to replay their own session to get the article
+they already pay for. That case was sound, and the thing worked: sessions were stored
+encrypted, replayed correctly, and the whole path ran end to end.
+
+What it did not do was help. Two publishers were tested seriously, both from the reader's
+own queue, and each turned out to be a ceiling rather than a bug:
+
+- **knack.be** honours the session — no SSO redirect, 183 KB against 13 KB anonymous, real
+  title and byline — and then sends a page with 3,368 characters of visible text whose
+  fattest paragraph containers are a paywall header and a paywall body. A distinctive
+  phrase from the middle of the article appears zero times in the file. The body arrives by
+  script afterwards.
+- **standaard.be** refuses with 403 before any cookie is read, and refuses the reader's own
+  laptop identically — same connection their browser uses, same browser User-Agent. Its
+  cookie jar carries `cf_clearance` and `__cf_bm`, and a clearance cookie is issued against
+  the address *and* the User-Agent that earned it, so a deployment can never present a valid
+  one.
+
+Against that: **not one confirmed case where our extraction beat Instapaper's on an article
+actually being read.** The standfirst recovery, which is the strongest non-paywall argument
+for keeping it, was built for and tested on a paywalled article. The soft-paywall benefit is
+real in principle and was never observed here.
+
+So the honest position was that a whole subsystem — a serverless function, a KV store, an
+encryption key, a session-paste flow, 470 KiB of parser that had to be actively kept out of
+the client bundle, and four environment variables — was carrying a benefit nobody had
+measured. Offered the choice between measuring it first and removing it, the reader chose to
+remove it. That is the right call to be theirs: it is their queue, their publishers, and
+they are the one who would have run the measurement.
+
+**What was kept, and why.**
+
+- `src/lib/furniture.ts` — the render-time cleaner. It works on Instapaper's text and always
+  did; it runs at render, so a rule added later cleans everything already cached.
+- `src/lib/fetch-guard.ts` — `api/resolve-image.ts` still fetches article pages for their
+  `og:image`, and every hop still needs its address vetted. This is now the only thing Stash
+  fetches from a publisher, and the politeness rules still apply to it.
+- `linkedom`, which the first pass at this removal deleted and the production build
+  immediately rejected. `src/lib/og-image.ts` parses the fetched page with it to find the
+  `og:image`, so it is a server-side DOM this app still needs — and the client-bundle rule
+  that keeps it out of the browser is still live rather than merely historical.
+- `truncation.ts` — `plainText` for the cleaner, `isTruncated` for the fixtures.
+- The composite `article_text` key, and `TextSource` as a union of one. Devices that ran an
+  earlier build still hold `extracted` rows, and the build that wrote them *preferred* them.
+  `bestOf` now selects the Instapaper row by name, so those are ignored rather than silently
+  rendered — which for the paywalled articles that prompted all this would mean a stored
+  subscription pitch on screen. They are left in place rather than deleted: dropping a
+  reader's stored articles to tidy a schema is the worse trade. `test/store.test.ts` covers
+  both halves.
+
+**What this costs, stated plainly.** An article Instapaper returns as a stub stays a stub,
+and an article it returns complete-but-imperfect stays imperfect — the missing-standfirst
+case is no longer fixable from inside the app. The reading view links out to the publisher's
+page, which is what Instapaper's own interface does and is the honest answer for an article
+we cannot give you.
+
+`docs/EXTRACTION.md` and `SESSIONS.md` are deleted rather than archived. The reasoning that
+was worth keeping is here; the rest was instructions for a feature that no longer exists,
+and stale instructions are worse than none.
+
 ---
 
 ## Open questions

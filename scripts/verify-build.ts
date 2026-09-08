@@ -29,6 +29,13 @@ const DIST = join(ROOT, 'dist');
  *
  * Listed by name rather than derived from `process.env`, so that adding a secret and
  * forgetting to add it here is a visible omission in a diff rather than a silent gap.
+ *
+ * The last four are vestigial: nothing in the app reads an encryption key or a KV token
+ * any more, since publisher sessions were removed along with Stash's own fetching. They
+ * stay on the list because a deployment that had them set still has them set until
+ * someone goes and deletes them, and a value that is still in the environment is still
+ * a value worth never seeing in `dist/`. Removing the names would narrow the guard to
+ * match the code rather than the deployment, which is the wrong of the two to follow.
  */
 export const SECRET_VARS = [
   'INSTAPAPER_CONSUMER_KEY',

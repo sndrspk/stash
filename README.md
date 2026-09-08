@@ -10,34 +10,17 @@ not affiliated with or endorsed by Instapaper.
 own instance, connect it to your own Instapaper account, and it serves exactly you. If you want to
 use it, fork or clone this repo and deploy it yourself.
 
-> **Status: built, and in use.** All nine phases are complete — the gate, the data layer, image
-> resolution, the front page, the reading view, the extraction fallback, offline support and the
-> ship checklist — and it has been read on an Android phone, a MacBook and a tablet in Safari. Two
-> things are still open rather than done: a Lighthouse pass against a real deployment, and one
-> confirmation that a pasted publisher session turns that publisher's stub into a full article.
-> [`TODO.md`](TODO.md) is the short list of what's left; [`WORKPLAN.md`](WORKPLAN.md) is the
-> running record behind it.
+> **Status: built, and in use.** The gate, the data layer, image resolution, the front page, the
+> reading view, offline support and the ship checklist are all complete, and it has been read on an
+> Android phone, a MacBook and a tablet in Safari. [`TODO.md`](TODO.md) is the short list of what's
+> left; [`WORKPLAN.md`](WORKPLAN.md) is the running record behind it.
 
-## Try the extraction probe
-
-Before any of the app exists, you can answer the question it hinges on: does replaying a publisher
-session actually get you the full article?
-
-```bash
-npm install
-npm run probe -- https://www.example.com/some-paywalled-article
-```
-
-With a session stored for that host it fetches twice — anonymously and authenticated — and reports
-what each attempt got:
-
-```
-  anonymous         HTTP 200  raw   412 KB  extracted      847 chars  looks truncated
-  with session      HTTP 200  raw   448 KB  extracted   18,455 chars  looks complete
-```
-
-[`SESSIONS.md`](SESSIONS.md) covers where to get the cookie header.
-`--file <path>` runs the same pipeline over a saved HTML file, with no network.
+> **Stash does not fetch publisher pages.** It reads what Instapaper's `get_text` returns and
+> renders that. An earlier version fetched articles itself, replaying publisher sessions the reader
+> pasted in, to get past paywalls and to fix articles Instapaper returned incomplete. It was
+> removed in full — the reasoning, and the measurements behind it, are in
+> [`WORKPLAN.md`](WORKPLAN.md#removing-stashs-own-fetching). The reading view links out to the
+> publisher's own page, which is the honest fallback for an article Instapaper cannot give you.
 
 ## What it does
 
@@ -49,21 +32,19 @@ what each attempt got:
   layout you move through sideways; scrolling is the ordinary web one, and is the default on a
   phone. Per-article archive and delete, sticky typography preferences (font, size, line height,
   column width), and a choice of paper — beige, white, blue, lilac or mustard — which the whole app
-  is printed on. Under the headline, every article says where its text came from — Instapaper or
-  Stash's own extraction — and links to the publisher's page.
+  is printed on. Under the headline, every article names its publisher and links to the original
+  page.
 - **Sync.** Archive and delete hit the Instapaper API, not just local state. Bookmarks added
   elsewhere (phone, browser extension) appear on the next refresh.
-- **Better text than Instapaper alone.** Instapaper's own extractor gives up on some paywalled or
-  script-heavy pages. When it returns nothing usable, Stash re-extracts the article itself — and
-  for publishers you subscribe to, it can replay a session you established yourself so the page
-  arrives complete. Stash's own extraction also recovers the standfirst, the paragraph between
-  headline and body that Readability drops when a publisher marks it up outside the article
-  container. Note the boundary: re-extraction only happens when Instapaper's text is missing or
-  looks truncated, so an article Instapaper returns *complete but imperfect* is shown as it came.
+- **Instapaper's text, cleaned at render.** What `get_text` returns is what you read. Page
+  furniture — share prompts, newsletter boxes, "read more" tails — is stripped when the article is
+  drawn rather than when it arrives, so a rule added next month cleans everything already cached.
+  An article Instapaper cannot extract stays a stub, and the reading view links out to the
+  publisher's own page, which is the honest answer for one.
 
-The product spec is [`docs/DESIGN_SPEC.md`](docs/DESIGN_SPEC.md) and the extraction subsystem is
-[`docs/EXTRACTION.md`](docs/EXTRACTION.md); where the implementation deliberately departs from
-either, [`WORKPLAN.md`](WORKPLAN.md) records why.
+The product spec is [`docs/DESIGN_SPEC.md`](docs/DESIGN_SPEC.md); where the implementation
+deliberately departs from it, [`WORKPLAN.md`](WORKPLAN.md) records why — including the removal of
+Stash's own fetching, which the spec still describes.
 
 ## Architecture
 
@@ -73,7 +54,7 @@ either, [`WORKPLAN.md`](WORKPLAN.md) records why.
 │                         │ ─────► │  (same deployment)       │ ────► │  Full API    │
 │  IndexedDB cache        │        │                          │       └──────────────┘
 │  no credentials         │        │  OAuth token from env    │       ┌──────────────┐
-└─────────────────────────┘        │  article extraction      │ ────► │  Source URLs │
+└─────────────────────────┘        │  og:image resolution     │ ────► │  Source URLs │
                                    └──────────────────────────┘       └──────────────┘
 ```
 
@@ -84,11 +65,9 @@ either, [`WORKPLAN.md`](WORKPLAN.md) records why.
 - **Cache is per-device**, in IndexedDB: bookmarks, article text, reading preferences. None of it is
   precious — Instapaper is the source of truth and text is re-fetchable — so eviction costs an API
   round-trip, not data.
-- **A small Redis store** holds the two things that can't live in the browser or in env vars:
-  resolved image URLs (expensive to re-derive, worth sharing across devices) and encrypted
-  per-publisher session cookies. Either transport works — an HTTP endpoint with a bearer token, or a
-  `redis://` connection string — because managed Redis comes in both shapes and a reader who has
-  attached one should not have to attach the other.
+- **No database, and no key-value store.** There was one, holding encrypted per-publisher session
+  cookies; it went when Stash's own fetching did. Nothing now outlives a request except what
+  Instapaper holds and what each device caches.
 - **Access is gated by a passphrase** you set at deploy time. Without it, anyone who finds the URL
   can read and delete your Instapaper queue.
 
@@ -110,26 +89,19 @@ src/routes/           One component per route
 src/components/       Shared UI
 src/hooks/            Reusable behaviour: the column layout, the snap, install and pull
 src/styles/           Theme tokens (light/dark) and the self-hosted @font-face rules
-src/lib/              Extraction core, IndexedDB, image resolution, column arithmetic
+src/lib/              IndexedDB, image resolution, sanitizing, column arithmetic
 api/                  Serverless functions (one origin with the app, via Vercel)
 public/fonts/         The four reading faces, self-hosted; see its LICENSE.md
 public/icons/         PWA icons, generated by scripts/icons.ts
-scripts/probe.ts      CLI: does a session change what this publisher serves?
 scripts/fonts.ts      Refetches the fonts; scripts/icons.ts redraws the icons
 test/                 Unit tests, adversarial where it matters
 fixtures/             Saved pages for offline testing
-SESSIONS.md           How to give Stash a publisher session, step by step
 TODO.md               What's still open, as a short list
 docs/DESIGN_SPEC.md   Product + technical spec (source of truth)
-docs/EXTRACTION.md    Full-text extraction, ported from the SanFeedBin method
 docs/VERCEL.md        Why vercel.json says what it says
 WORKPLAN.md           Phased implementation plan, decisions, open questions, risks
 .env.example          Every environment variable, documented
 ```
-
-The extraction code in `src/lib` was written early, before the app around it, because it answers
-the riskiest product question first. It is wired in now: `api/extract` is what the reading view's
-"Full text" calls, and `npm run probe` drives the same modules from the command line.
 
 ## Getting started
 
@@ -215,17 +187,9 @@ Vercel attaches the environment at deploy time, so redeploy after adding them: `
 Open the URL, enter your passphrase, press Refresh. If something is wrong, `/settings` names which
 variable rather than making you guess.
 
-### 4. Optional: publisher sessions
-
-Only if you subscribe to publishers whose articles arrive as stubs. Attach a Redis store to the
-project and set `STASH_ENCRYPTION_KEY` (`openssl rand -base64 32`), then follow
-[`SESSIONS.md`](SESSIONS.md). Without it, extraction still runs anonymously, which already handles a
-good share of soft paywalls.
-
-Either kind of store works. One that offers an HTTP endpoint (Upstash, Vercel KV) is preferred and
-is used automatically; one that offers only a `redis://` connection string (Redis Cloud,
-ElastiCache, your own server) is used when no HTTP pair is set. Settings names the variables it
-found, so it tells you which you have rather than leaving you to infer it.
+That is the whole deployment. There is no fourth step: no store to attach, no encryption key to
+generate, and no per-publisher setup — an article Instapaper returns as a stub stays a stub, and the
+reading view links out to the publisher's page.
 
 ### Before you deploy
 
@@ -243,8 +207,8 @@ search has nothing to search for and says so.
 ### What it costs
 
 Vercel's Hobby tier is free and ample for one reader; note it is **non-commercial use only**, which
-is fine for this. A KV store's free tier is vastly larger than a few dozen cookie strings need.
-There is no database, no scheduled job, and nothing that runs when you are not reading.
+is fine for this. There is no database, no key-value store, no scheduled job, and nothing that runs
+when you are not reading.
 
 ## Constraints we hold ourselves to
 
@@ -262,8 +226,8 @@ and `bookmarks/delete`.
   drains serially, one call per article, which is the same shape a reader clicking would produce.
   There is no batch endpoint anywhere in this codebase, and `parseBookmarkId` refuses an array
   where a number belongs rather than looping over it.
-- Never scrape instapaper.com. Image resolution and text re-extraction only ever fetch a
-  bookmark's own original source URL.
+- Never scrape instapaper.com. Image resolution — now the only thing that fetches anything at all —
+  only ever requests a bookmark's own original source URL.
 - The app never creates bookmarks.
 - "Instapaper" is not used as this app's name or logo — Stash describes itself as a client *for*
   Instapaper.
@@ -291,10 +255,11 @@ incidental:
   attribute, image dimension and character count survives, and every word is replaced. See
   [`fixtures/MANIFEST.md`](fixtures/MANIFEST.md).
 
-Phase 7's extraction fallback is the only path that fetches from a publisher directly rather than
-through Instapaper, so it fetches **like a reader, not a crawler**: one named article that you
-already saved, an honest `Stash/0.1` User-Agent rather than a disguised one, bounded concurrency
-with a per-host delay, and session cookies replayed only for publishers you subscribe to.
+**Stash no longer fetches article text from publishers at all.** It did, replaying sessions the
+reader pasted in, and that path is gone — see [`WORKPLAN.md`](WORKPLAN.md#removing-stashs-own-fetching).
+What remains is `og:image` resolution, which requests one named article you already saved, with an
+honest `Stash/0.1` User-Agent rather than a disguised one, bounded concurrency and a per-host delay:
+like a reader, not a crawler.
 
 None of this is legal advice. It is the reasoning the design actually rests on, written down so that
 nobody forking this has to reconstruct it.

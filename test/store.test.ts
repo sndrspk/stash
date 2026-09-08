@@ -5,6 +5,7 @@ import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { IMAGE_RETRY_MS, PURGE_GRACE_MS, closeDb, getDb, textKey } from '../src/lib/db';
+import type { TextSource } from '../src/lib/db';
 import {
   markLocally,
   needsImageLookup,
@@ -14,7 +15,6 @@ import {
   restore,
   unmarkPurge,
   writeImage,
-  readTextSources,
   writeText,
   applySync,
 } from '../src/lib/store';
@@ -195,27 +195,17 @@ describe('purgeExpired', () => {
 });
 
 describe('article text', () => {
-  it('stores beside, never over', async () => {
-    await writeText(1, 'instapaper', '<p>stub</p>', NOW);
-    await writeText(1, 'extracted', '<p>full article</p>', NOW);
+  it('stores the Instapaper copy under a composite key', async () => {
+    await writeText(1, 'instapaper', '<p>the article</p>', NOW);
 
     const db = await getDb();
-    // Both survive: a bad extraction must never destroy what Instapaper returned,
-    // and "show original" comes free from having kept it.
-    expect((await db.get('article_text', textKey(1, 'instapaper')))?.html).toBe('<p>stub</p>');
-    expect((await db.get('article_text', textKey(1, 'extracted')))?.html).toBe(
-      '<p>full article</p>',
+    expect((await db.get('article_text', textKey(1, 'instapaper')))?.html).toBe(
+      '<p>the article</p>',
     );
   });
 
-  it('prefers the extracted copy when both exist', async () => {
-    await writeText(1, 'instapaper', '<p>stub</p>', NOW);
-    await writeText(1, 'extracted', '<p>full</p>', NOW);
-    expect((await readBestText(1))?.source).toBe('extracted');
-  });
-
-  it('falls back to the Instapaper copy alone', async () => {
-    await writeText(1, 'instapaper', '<p>stub</p>', NOW);
+  it('reads it back', async () => {
+    await writeText(1, 'instapaper', '<p>the article</p>', NOW);
     expect((await readBestText(1))?.source).toBe('instapaper');
   });
 
@@ -224,35 +214,49 @@ describe('article text', () => {
   });
 
   /*
-   * Whether a session was replayed is stored, not merely reported once.
+   * The upgrade case, and the reason `bestOf` selects by name rather than taking the
+   * first row it finds.
    *
-   * "Extracted by Stash" cannot answer the question a reader actually has — plenty of
-   * soft paywalls yield anonymously, so a successful extraction says nothing about
-   * whether the session they pasted did any work. And the question gets asked days
-   * later, comparing our copy against the publisher's page, not in the second after
-   * the fetch.
+   * Devices that ran a build with Stash's own fetching still hold `extracted` rows,
+   * and the version that wrote them *preferred* them over Instapaper's copy. Reading
+   * one back now would put text on screen that this build cannot explain, refresh or
+   * replace — including, for the paywalled articles that motivated the removal, a
+   * stored subscription pitch where the article should be.
+   *
+   * Written through the raw store because `writeText` cannot express the old source
+   * any more, which is the point: this is data from a schema the code has left
+   * behind, and the test has to speak the old language to be worth anything.
    */
-  it('records whether a session was replayed', async () => {
-    await writeText(1, 'extracted', '<p>full</p>', NOW, true);
-    expect((await readTextSources(1)).extractedAuthenticated).toBe(true);
+  it('ignores an extracted row left by an earlier build', async () => {
+    const db = await getDb();
+    await db.put('article_text', {
+      key: '1:extracted',
+      bookmark_id: 1,
+      source: 'extracted' as TextSource,
+      html: '<p>Word abonnee. Abonneer nu.</p>',
+      fetched_at: NOW,
+      purge_after: null,
+    });
+    await writeText(1, 'instapaper', '<p>the article</p>', NOW);
 
-    await writeText(2, 'extracted', '<p>full</p>', NOW, false);
-    expect((await readTextSources(2)).extractedAuthenticated).toBe(false);
+    const best = await readBestText(1);
+    expect(best?.source).toBe('instapaper');
+    expect(best?.html).toBe('<p>the article</p>');
   });
 
-  it('says nothing about a row written before the field existed', async () => {
-    // Absent is not false. Saying "anonymously" about a fetch we cannot speak for
-    // would be a confident claim built on a missing value.
-    await writeText(3, 'extracted', '<p>full</p>', NOW);
-    expect((await readTextSources(3)).extractedAuthenticated).toBeUndefined();
-  });
+  it("leaves that row in place rather than deleting a reader's data", async () => {
+    const db = await getDb();
+    await db.put('article_text', {
+      key: '2:extracted',
+      bookmark_id: 2,
+      source: 'extracted' as TextSource,
+      html: '<p>old</p>',
+      fetched_at: NOW,
+      purge_after: null,
+    });
+    await writeText(2, 'instapaper', '<p>new</p>', NOW);
 
-  it('reads the flag from the extracted row, never the Instapaper one', async () => {
-    // It is meaningless on the Instapaper row — that text was fetched by Instapaper,
-    // not by us — so the accessor must not pick it up even if something writes one.
-    await writeText(4, 'instapaper', '<p>stub</p>', NOW, true);
-    await writeText(4, 'extracted', '<p>full</p>', NOW, false);
-    expect((await readTextSources(4)).extractedAuthenticated).toBe(false);
+    expect(await db.get('article_text', '2:extracted')).toBeDefined();
   });
 });
 

@@ -5,8 +5,6 @@ import { TypographyPanel } from '../components/TypographyPanel';
 import { useColumnLayout } from '../hooks/useColumnLayout';
 import { useColumnSnap } from '../hooks/useColumnSnap';
 import { useOnline } from '../hooks/useOnline';
-import type { BookmarkRecord } from '../lib/db';
-import { needsExtraction } from '../lib/extraction';
 import { removeFurniture } from '../lib/furniture';
 import type { FlushResult } from '../lib/pending';
 import { prefsToCss, DEFAULT_PREFS, resolveReadingMode } from '../lib/prefs';
@@ -14,11 +12,9 @@ import { externalHref } from '../lib/sanitize';
 import { useReadingMode } from '../hooks/useReadingMode';
 import {
   ApiError,
-  useArticleSources,
   useArticleText,
   useBookmark,
   useBookmarkAction,
-  useExtractArticle,
   useReadingPrefs,
   useSetReadingPrefs,
 } from '../lib/queries';
@@ -47,9 +43,6 @@ export function Reader() {
 
   const { data: bookmark } = useBookmark(id);
   const { data: html, isLoading, isError } = useArticleText(id);
-  const { data: sources } = useArticleSources(id);
-  const extract = useExtractArticle();
-  const [showOriginal, setShowOriginal] = useState(false);
   const { data: stored } = useReadingPrefs();
   const setPrefs = useSetReadingPrefs();
   const prefs = stored ?? DEFAULT_PREFS;
@@ -71,88 +64,28 @@ export function Reader() {
   const paged = mode === 'paged';
 
   /*
-   * Which copy is on screen, and the two passes it goes through.
+   * The one pass the article still goes through, and the trust boundary at the end.
    *
-   * `removeFurniture` runs **here**, at render, not at extraction — that is the
-   * whole reason it is a separate cleaner. A marker added next month cleans every
-   * article already in the cache, with no re-sync and nothing invalidated.
+   * `removeFurniture` runs **here**, at render — that is the whole reason it is a
+   * cleaner of its own rather than something done once when text arrives. A marker
+   * added next month cleans every article already in the cache, with no re-sync and
+   * nothing invalidated.
    *
-   * Sanitising is last and unconditional. It is the trust boundary, and both copies
-   * are third-party HTML; running it once per article rather than once per render
-   * is also the difference between a smooth reflow and a stutter.
-   */
-  const shown = showOriginal ? (sources?.instapaper ?? html) : html;
-
-  /*
-   * Where the text on screen came from, and a way out to the page it came from.
-   *
-   * `readBestText` prefers our extraction over Instapaper's, silently and correctly —
-   * but silently means a reader comparing this against the publisher's own page has no
-   * way to know which of the two they are looking at, and no way to tell "Instapaper
-   * dropped the standfirst" from "our extractor did". That distinction cost a session's
-   * worth of debugging on an article whose intro was missing.
+   * Sanitising is last and unconditional. Instapaper's text is third-party HTML and
+   * the fact that it arrives through an API we trust does not make its contents
+   * trustworthy; running it once per article rather than once per render is also the
+   * difference between a smooth reflow and a stutter.
    *
    * `externalHref` rather than the URL directly: it comes from Instapaper, it never
    * passes through DOMPurify on this path, and React will render a `javascript:` href
    * without complaint.
    */
-  const usingExtraction = sources?.extracted != null && !showOriginal;
-  /*
-   * "Extracted by Stash" alone could not answer the question it was added for.
-   *
-   * Plenty of soft paywalls yield to an anonymous fetch, so an extraction that
-   * succeeded says nothing about whether the reader's session did the work — and
-   * "did my session do the work?" is exactly what someone asks when deciding whether
-   * pasting one was worth it. The server is the only party that knows, since it is
-   * the only one that sees the jar; `authenticated` is its answer, stored beside the
-   * text so the question can be asked days later rather than only in the second
-   * after the fetch.
-   *
-   * Silent when unrecorded. Rows written before the field existed have no answer,
-   * and saying "anonymously" about a fetch we cannot speak for would be a confident
-   * claim built on an absent value.
-   */
-  const withSession = sources?.extractedAuthenticated;
-  const provenance = usingExtraction
-    ? withSession === undefined
-      ? 'Extracted by Stash'
-      : withSession
-        ? 'Extracted by Stash, with your session'
-        : 'Extracted by Stash, anonymously'
-    : 'Text from Instapaper';
   const origin = bookmark === undefined ? null : externalHref(bookmark.url);
   const clean = useMemo(
-    () => (shown === undefined ? '' : sanitizeArticle(removeFurniture(shown))),
-    [shown],
+    () => (html === undefined ? '' : sanitizeArticle(removeFurniture(html))),
+    [html],
   );
   const ready = clean !== '';
-
-  /*
-   * Whether to offer "fetch full content".
-   *
-   * The question is about **what is on screen**, not about what is in the cache, and
-   * the difference is the whole point. Keyed on "there is no extraction yet", the
-   * button vanished the moment a stub extraction was stored — so an article that had
-   * been fetched once and come back paywalled offered no way to try again, which is
-   * exactly the article a reader has just gone and pasted a session for. Asked this
-   * way, the offer stands for as long as the reader is looking at a stub.
-   *
-   * It costs nothing when there is nothing to do: `force` is absent from the automatic
-   * pass below, so a stored extraction still short-circuits on the already-extracted
-   * gate rather than fetching. `needsExtraction` is the same function `extraction.ts`
-   * uses, so the button and the gate cannot disagree about what a stub is.
-   *
-   * `textLoaded` is not decoration. Without it the first render — before the query has
-   * resolved — asks `needsExtraction(undefined)`, which is `true` by design, and the
-   * automatic pass below fires for *every* article a reader opens. `extraction.ts`
-   * re-checks against IndexedDB, but that row is written by this very query, so the
-   * re-check reads nothing and agrees. The result is a fetch of the publisher's page
-   * for a full article that never needed one, and an extraction stored beside text
-   * that was fine. The browser run caught it as every fixture rendering the same
-   * extracted text; "not loaded yet" and "is a stub" must not be the same answer.
-   */
-  const textLoaded = !isLoading && html !== undefined;
-  const canExtract = bookmark !== undefined && textLoaded && needsExtraction(shown);
 
   /*
    * Whether the text already opens with its own headline.
@@ -190,86 +123,6 @@ export function Reader() {
     const frame = requestAnimationFrame(remeasure);
     return () => cancelAnimationFrame(frame);
   }, [prefs, ready, paged, remeasure, clean, bookmark?.title, titleIsInText]);
-
-  /*
-   * Extraction runs on its own when Instapaper's copy is a stub.
-   *
-   * Gated, not eager: `extractArticle` re-checks the heuristic, the week-long
-   * backoff and the single-flight lock, so firing this on every open costs one
-   * IndexedDB read for an article that has already been dealt with. `force` is
-   * deliberately absent — this is the hint; the button is the decision.
-   */
-  const startExtract = extract.mutate;
-  useEffect(() => {
-    if (!canExtract || bookmark === undefined) return;
-    startExtract({ bookmark });
-  }, [canExtract, bookmark, startExtract]);
-
-  /*
-   * What the last extraction has to say for itself.
-   *
-   * Derived from the mutation rather than pushed into state by the button, because the
-   * automatic pass produces exactly the same outcomes and a reader who never pressed
-   * anything still deserves to be told that a session looks dead. The one thing that
-   * *is* conditional on the button is the "nothing to fetch" line: the automatic pass
-   * skips routinely and by design — backoff, already extracted, not truncated — and
-   * announcing each of those would be noise on every second article.
-   */
-  const note = useMemo((): { text: string; sessions?: boolean } | null => {
-    if (extract.isPending) return null;
-    if (extract.error) {
-      return { text: `Could not fetch: ${extract.error.message}` };
-    }
-
-    const outcome = extract.data?.outcome;
-    const forced = extract.variables?.force === true;
-    if (outcome == null) return forced ? { text: 'Nothing to fetch.' } : null;
-
-    if (outcome.kind === 'blocked') return { text: `That page cannot be fetched: ${outcome.tag}.` };
-    if (outcome.kind === 'failed') {
-      /*
-       * Whether cookies went out is the whole of what separates two different
-       * problems wearing the same status code.
-       *
-       * A 403 *with* a session is the publisher refusing us before the cookies were
-       * ever considered — bot protection, which pasting a fresh session will not
-       * touch. A 403 *without* one means nothing was stored for this host, and the
-       * thing to look at is the session list and the name it is filed under. Saying
-       * only "HTTP 403" sends a reader to re-paste a session that is working fine.
-       */
-      const how = outcome.authenticated
-        ? ' Your session was sent, so this is the publisher refusing the request itself, not a session problem.'
-        : ' No session was sent for this host — check Settings if you expected one.';
-      /*
-       * Only when it differs from the article's own URL, and then it is the most
-       * useful sentence on the screen: a refusal at the page we asked for is the
-       * publisher saying no, while a refusal somewhere else means we were sent there
-       * — a consent wall, a login, a regional gate — and the status code is about
-       * that page rather than about the article.
-       */
-      const landed =
-        outcome.finalUrl !== null && bookmark !== undefined && outcome.finalUrl !== bookmark.url
-          ? ` The request ended at ${outcome.finalUrl}, not at the article, so that is what refused it.`
-          : '';
-      return { text: `The publisher's page could not be read: ${outcome.tag}.${how}${landed}` };
-    }
-    if (!outcome.truncated) return null;
-
-    /*
-     * The expired-session diagnostic. Both branches are stubs; what separates them is
-     * whether cookies were actually sent for this host, which only the server knows —
-     * so it is the server that decides, and this only phrases it.
-     */
-    return outcome.sessionExpired
-      ? {
-          text: `The session for ${bookmark ? hostOf(bookmark.url) : 'this publisher'} may have expired — the page still came back as a stub with it. Nothing has been cleared; paste a fresh one to be sure.`,
-          sessions: true,
-        }
-      : {
-          text: 'Fetched, but it still looks like a stub — this publisher may want a signed-in session.',
-          sessions: true,
-        };
-  }, [extract.isPending, extract.error, extract.data, extract.variables, bookmark]);
 
   const failed = archive.error ?? remove.error;
   useEffect(() => {
@@ -333,26 +186,6 @@ export function Reader() {
   }, [turn, navigate, paged]);
 
   /*
-   * The explicit "fetch full content" action.
-   *
-   * `force` is the whole of it: an explicit request is a decision, not a hint, so it
-   * skips the truncation gate, the week-long backoff and the already-extracted check
-   * alike. What it reports is derived from the mutation below rather than set here,
-   * because the automatic pass produces the same facts and they deserve the same line.
-   */
-  function runExtract(force: boolean) {
-    extract
-      .mutateAsync({ bookmark: bookmark as BookmarkRecord, force })
-      .then((result) => {
-        if (result.outcome?.kind === 'extracted') setShowOriginal(false);
-      })
-      .catch(() => {
-        // Reported through `extract.error` in `note` below. Swallowed here only so an
-        // offline click is not an unhandled rejection.
-      });
-  }
-
-  /*
    * Archive and delete.
    *
    * Leaving the article is unconditional now, and that is the point of the queue:
@@ -384,22 +217,6 @@ export function Reader() {
 
         <p className={styles.crumb}>{bookmark ? hostOf(bookmark.url) : ''}</p>
 
-        {sources?.extracted != null && (
-          <button
-            type="button"
-            className={styles.action}
-            aria-pressed={showOriginal}
-            onClick={() => setShowOriginal((original) => !original)}
-            title={
-              showOriginal
-                ? 'Showing what Instapaper returned'
-                : 'Showing the text Stash extracted from the publisher'
-            }
-          >
-            {showOriginal ? 'Extracted' : 'Original'}
-          </button>
-        )}
-
         <div className={styles.actions}>
           <div className={styles.settingsWrap} ref={settings}>
             <button
@@ -419,54 +236,6 @@ export function Reader() {
               />
             )}
           </div>
-          {/*
-            One control, three meanings, and always offered.
-
-            "Full text" when what is on screen is a stub. "Re-extract" when an
-            extraction is already stored. "Extract" when neither — Instapaper's copy
-            looks complete and the reader wants ours anyway.
-
-            That third case is the one that was missing, and hiding it was not a
-            cosmetic choice. An article Instapaper returns complete could not be
-            fetched at all: no stub, so no "Full text"; no stored extraction, so no
-            "Re-extract". Which meant a reader could not test whether their publisher
-            session does anything except on an article that happened to be a stub, and
-            could not reach our extraction for an article Instapaper returned complete
-            but imperfect — the missing-standfirst case — even knowing exactly what was
-            wrong with it.
-
-            The machinery was always willing: `force` skips the heuristic, the backoff
-            and the already-extracted gate alike, which is the whole distinction from
-            the automatic pass above. Only the button's visibility said no.
-
-            It costs a fetch of the publisher's page when pressed, and nothing when
-            not. That is the right trade for a control a reader reaches for
-            deliberately, having already decided the copy on screen is not the one they
-            want.
-          */}
-          {textLoaded && bookmark !== undefined && (
-            <button
-              type="button"
-              className={styles.action}
-              disabled={extract.isPending}
-              onClick={() => runExtract(true)}
-              title={
-                canExtract
-                  ? 'Fetch the full article from the publisher'
-                  : sources?.extracted != null
-                    ? 'Fetch it from the publisher again, replacing the stored copy'
-                    : "Fetch the publisher's own page, even though Instapaper's copy looks complete"
-              }
-            >
-              {extract.isPending
-                ? 'Fetching…'
-                : canExtract
-                  ? 'Full text'
-                  : sources?.extracted != null
-                    ? 'Re-extract'
-                    : 'Extract'}
-            </button>
-          )}
           <button
             type="button"
             className={styles.action}
@@ -493,26 +262,6 @@ export function Reader() {
       {error !== null && (
         <p className={styles.error} role="alert">
           {error}
-        </p>
-      )}
-
-      {/*
-        One render site for the extraction note, above the article rather than inside
-        the empty state. A stub that Instapaper *did* return text for renders as an
-        article, so a note living in the empty state would be invisible in precisely
-        the case the diagnostic exists for.
-      */}
-      {note !== null && (
-        <p className={styles.note}>
-          {note.text}
-          {note.sessions === true && (
-            <>
-              {' '}
-              <button type="button" className={styles.link} onClick={() => navigate('/settings')}>
-                Publisher sessions
-              </button>
-            </>
-          )}
         </p>
       )}
 
@@ -550,16 +299,16 @@ export function Reader() {
             {online ? (
               <>
                 <p>Instapaper has no text for this one — a paywall, a video page, or a PDF.</p>
-                {bookmark !== undefined && (
+                {origin !== null && (
                   <p>
-                    <button
-                      type="button"
+                    <a
                       className={styles.action}
-                      disabled={extract.isPending}
-                      onClick={() => runExtract(true)}
+                      href={origin}
+                      target="_blank"
+                      rel="noopener noreferrer"
                     >
-                      {extract.isPending ? 'Fetching…' : 'Fetch full content'}
-                    </button>
+                      Open at the publisher
+                    </a>
                   </p>
                 )}
               </>
@@ -595,14 +344,20 @@ export function Reader() {
                   <h1 className={styles.headlineText}>{bookmark.title}</h1>
                 )}
                 {/*
-                  The provenance line, and it renders unconditionally.
+                  Where the text came from, and a way out to the page it came from.
 
-                  It used to come with the headline, which meant a publisher whose
-                  `get_text` keeps its own `<h1>` got no line at all — and those are
-                  exactly the articles where "where did this text come from?" is
-                  hardest to answer, since the Original toggle is also absent when
-                  there is no extraction to toggle to. Saying "Instapaper" only when
-                  something else is also true is not an indicator.
+                  It renders unconditionally, and that is deliberate: it used to come
+                  with the headline, which meant a publisher whose `get_text` keeps
+                  its own `<h1>` got no line at all — and those are exactly the
+                  articles where "where did this text come from?" is hardest to
+                  answer. An indicator that appears only when something else is also
+                  true is not an indicator.
+
+                  There is one source of text again, so the line no longer has to say
+                  which of two it is. The link is the part that earns its place: the
+                  reading view is a cleaned copy of someone else's page, and going to
+                  see the original is a thing readers want often enough that
+                  Instapaper puts it in its own interface.
                 */}
                 <p className={styles.byline}>
                   {origin === null ? (
@@ -617,7 +372,7 @@ export function Reader() {
                       {hostOf(bookmark.url)}
                     </a>
                   )}
-                  <span className={styles.provenance}> · {provenance}</span>
+                  <span className={styles.provenance}> · Text from Instapaper</span>
                 </p>
               </header>
             )}

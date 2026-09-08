@@ -1,9 +1,14 @@
 /**
- * Is this text worth fetching the full page for?
+ * Does this text look like an excerpt rather than an article?
  *
- * Ported from SanFeedBin's Truncation (docs/EXTRACTION.md). Pure and side-effect-free —
- * no I/O, so it is trivially unit-tested. In SanFeedBin this ran over a feed's excerpt;
- * in Stash it runs over whatever Instapaper's get_text returned, asking the same question.
+ * It used to decide whether to fetch the publisher's page ourselves, which is why it
+ * reads as a question about worth. Stash no longer fetches, and nothing acts on the
+ * answer any more: `plainText` is what the render-time cleaner needs, and `isTruncated`
+ * survives because `fixtures.ts` reports it when capturing a page, which is how you tell
+ * a fixture of a stub from a fixture of an article.
+ *
+ * Kept rather than deleted for that reason alone. Pure and side-effect-free, so it costs
+ * nothing to keep and is trivially unit-tested.
  */
 
 /** Below this many characters of plain text, assume we were served an excerpt. */
@@ -14,15 +19,15 @@ export const MIN_FULL_LENGTH = 1500;
  *
  * Keep this list short. An over-eager phrase produces false positives on every article
  * that happens to contain it — and unlike the length signal, a phrase can appear in a
- * perfectly complete article's related-links furniture. The cost of a false positive is
- * one wasted fetch, not a wrong render, because the extraction is compared before it is
- * used.
+ * perfectly complete article's related-links furniture. Nothing acts on the verdict now,
+ * so a false positive costs a misleading line in a fixture manifest rather than anything
+ * a reader sees.
  */
 export const SENTINELS = ['read more', 'continue reading'] as const;
 
 export interface TruncationVerdict {
   truncated: boolean;
-  /** Short human-readable signals, for the failure tag and the probe's output. */
+  /** Short human-readable signals, for the fixture manifest to report. */
   reasons: string[];
   chars: number;
 }

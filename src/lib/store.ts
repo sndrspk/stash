@@ -211,50 +211,22 @@ export async function readText(
 }
 
 /**
- * Both sources for a bookmark, reduced to the one the reading view should show.
+ * The text for a bookmark, from the rows stored against it.
  *
- * Extracted wins when present, because it only exists when `get_text` came back
- * truncated — but **only when it has something in it**. An empty `extracted` row is
- * not an article: it is how `extraction.ts` records a failed attempt and starts the
- * week before the next one. Preferring it blindly would answer a perfectly good
- * Instapaper article with a blank screen, and would do so precisely for the
- * articles where extraction was needed and did not work.
+ * There is one source now, and this function survives the removal of the second on
+ * purpose. Devices that ran an earlier build still hold `extracted` rows in their
+ * IndexedDB, written when Stash fetched publisher pages itself; selecting the
+ * `instapaper` row by name rather than taking the first row means those are ignored
+ * rather than silently preferred. They are inert, not deleted — deleting a reader's
+ * stored articles to tidy up a schema is a worse trade than leaving a few kilobytes
+ * of dead rows behind.
  */
 export function bestOf(rows: readonly ArticleTextRecord[]): ArticleTextRecord | undefined {
-  const extracted = rows.find((row) => row.source === 'extracted');
-  if (extracted !== undefined && extracted.html.trim() !== '') return extracted;
   return rows.find((row) => row.source === 'instapaper');
 }
 
 export async function readBestText(id: number): Promise<ArticleTextRecord | undefined> {
   return bestOf(await (await getDb()).getAllFromIndex('article_text', 'by_bookmark', id));
-}
-
-export interface TextSources {
-  instapaper: string | null;
-  extracted: string | null;
-  /** Whether a session was replayed for the extracted copy; undefined when unrecorded. */
-  extractedAuthenticated?: boolean;
-}
-
-/**
- * Both copies, as they are stored.
- *
- * An empty extracted row reads back as `null` rather than as an empty string: it is
- * a recorded failure, not an article, and the reading view should offer no toggle
- * for it.
- */
-export async function readTextSources(id: number): Promise<TextSources> {
-  const rows = await (await getDb()).getAllFromIndex('article_text', 'by_bookmark', id);
-  const pick = (source: TextSource) => {
-    const html = rows.find((row) => row.source === source)?.html ?? '';
-    return html.trim() === '' ? null : html;
-  };
-  return {
-    instapaper: pick('instapaper'),
-    extracted: pick('extracted'),
-    extractedAuthenticated: rows.find((row) => row.source === 'extracted')?.authenticated,
-  };
 }
 
 /**
@@ -286,10 +258,10 @@ export async function writeText(
   source: TextSource,
   html: string,
   now = Date.now(),
-  authenticated?: boolean,
 ): Promise<void> {
-  // Store beside, never over: writing the extracted copy must not destroy what
-  // Instapaper returned, so the key includes the source.
+  // The key includes the source, which is now a union of one. Kept that way because
+  // it is what makes an older build's `extracted` rows sit beside these rather than
+  // collide with them.
   await (
     await getDb()
   ).put('article_text', {
@@ -301,7 +273,6 @@ export async function writeText(
     purge_after: null,
     // Written only when the caller knows. `undefined` means "no answer recorded",
     // which is what every row stored before this field existed carries.
-    ...(authenticated === undefined ? {} : { authenticated }),
   });
 }
 
