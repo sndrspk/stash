@@ -23,6 +23,7 @@
 
 import { readFile, writeFile } from 'node:fs/promises';
 import { cookieHeaderFor, cookieNames } from '../src/lib/cookies.js';
+import { parseHTML } from 'linkedom';
 import { extract, extractFromHtml, type ExtractResult } from '../src/lib/extract.js';
 import { guardedFetch } from '../src/lib/fetch-guard.js';
 import {
@@ -111,6 +112,67 @@ function userAgentOption(args: Args): { userAgent?: string } {
   return args.userAgent === null ? {} : { userAgent: args.userAgent };
 }
 
+/** `div.article-body#main`, near enough — enough to find it in the file by eye. */
+function describeElement(element: Element): string {
+  const tag = element.tagName.toLowerCase();
+  const id = element.id === '' ? '' : `#${element.id}`;
+  const cls = element.getAttribute('class');
+  const classes =
+    cls === null || cls.trim() === '' ? '' : `.${cls.trim().split(/\s+/).slice(0, 3).join('.')}`;
+  return `${tag}${id}${classes}`;
+}
+
+/**
+ * Which containers hold the prose, and how much?
+ *
+ * This is the number that decides the whole question, and the first census left it out.
+ * A page can be 80% markup and still have no article in it — navigation, menus and
+ * footers are markup too. What separates "the article was never sent" from "Readability
+ * scored the wrong container" is how much *visible prose* the document holds against how
+ * much came out of the extractor.
+ *
+ * Reported per container rather than as one total, because a total cannot distinguish a
+ * page with one long article from a page with forty teasers, and those look identical
+ * until you see the shape. Elements with at least two direct `<p>` children are what
+ * Readability itself scores, so listing the fattest few names the container it should
+ * have picked — which is a starting point for a fix rather than just a verdict.
+ */
+function describeProse(document: Document, extracted: number | null): void {
+  for (const node of [...document.querySelectorAll('script, style, noscript')]) node.remove();
+
+  const visible = (document.body?.textContent ?? '').replace(/\s+/g, ' ').trim();
+
+  const candidates: { label: string; chars: number; paragraphs: number }[] = [];
+  for (const element of document.querySelectorAll('*')) {
+    const paragraphs = [...element.children].filter((c) => c.tagName.toLowerCase() === 'p');
+    if (paragraphs.length < 2) continue;
+    const chars = paragraphs.reduce(
+      (total, p) => total + (p.textContent ?? '').replace(/\s+/g, ' ').trim().length,
+      0,
+    );
+    if (chars > 0)
+      candidates.push({ label: describeElement(element), chars, paragraphs: paragraphs.length });
+  }
+  candidates.sort((a, b) => b.chars - a.chars);
+
+  console.log(
+    `    ${n(visible.length)} chars of visible text in the document` +
+      (extracted === null ? '' : ` ${DIM}(extractor found ${n(extracted)})${OFF}`),
+  );
+  if (candidates.length === 0) {
+    console.log(
+      `    ${DIM}no container with two or more paragraphs — there is no prose here${OFF}`,
+    );
+    return;
+  }
+  console.log(`    ${DIM}fattest paragraph containers:${OFF}`);
+  for (const c of candidates.slice(0, 3)) {
+    console.log(
+      `      ${n(c.chars).padStart(7)} chars in ${c.paragraphs} <p>  ${DIM}${c.label}${OFF}`,
+    );
+  }
+}
+
 /** Recursively find the longest `articleBody` anywhere in a parsed JSON-LD value. */
 function longestArticleBody(value: unknown): string | null {
   if (Array.isArray(value)) {
@@ -146,7 +208,7 @@ function longestArticleBody(value: unknown): string | null {
  * Signals only, no publisher names: paragraph markup, JSON-LD, and the two hydration
  * shapes common enough to be worth naming (`__NEXT_DATA__`, streamed `self.__next_f`).
  */
-function describeRaw(html: string): void {
+function describeRaw(html: string, extracted: number | null = null): void {
   const paragraphs = (html.match(/<p[\s>]/gi) ?? []).length;
   const scriptBytes = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)].reduce(
     (total, m) => total + (m[1]?.length ?? 0),
@@ -193,6 +255,10 @@ function describeRaw(html: string): void {
       ? `    hydration payload: ${hydration.join(', ')}`
       : `    no recognised hydration payload`,
   );
+
+  // Last, and destructive to the parsed tree — it strips script and style to count what
+  // a reader would see. Nothing below may use the document afterwards.
+  describeProse(parseHTML(html).document as unknown as Document, extracted);
 }
 
 /** A refusal the publisher issued deliberately, rather than a transport failure. */
@@ -303,7 +369,7 @@ async function main(): Promise<number> {
     // The same census as raw mode, because this is the other half of the same workflow:
     // a page the deployment cannot reach gets saved from a browser and reduced here, and
     // "why is the extraction short" is the question either way.
-    describeRaw(html);
+    describeRaw(html, result.ok ? result.text.length : null);
     console.log('');
     if (result.ok) {
       console.log(
@@ -363,7 +429,11 @@ async function main(): Promise<number> {
       console.log(`${' '.repeat(20)}${YELLOW}stopped at the size cap — the page is larger${OFF}`);
     console.log(`${' '.repeat(20)}${DIM}wrote ${args.raw}${OFF}`);
     console.log('');
-    describeRaw(response.body);
+    // Reduced too, though this mode is not about the extraction: it costs no second
+    // fetch, and "how much prose is in there" only means something next to "how much
+    // came out".
+    const reduced = extractFromHtml(response.body, response.url, cookie !== null);
+    describeRaw(response.body, reduced.ok ? reduced.text.length : null);
     console.log('');
     return response.status >= 200 && response.status < 300 ? 0 : 1;
   }
