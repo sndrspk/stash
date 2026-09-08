@@ -9,6 +9,7 @@
 import { Readability } from '@mozilla/readability';
 import { parseHTML } from 'linkedom';
 import { findLede, restoreLede } from './cleaners.js';
+import { domainMatches } from './cookies.js';
 import { guardedFetch, BlockedUrlError, type GuardedFetchOptions } from './fetch-guard.js';
 import { isTruncated, plainText, type TruncationVerdict } from './truncation.js';
 
@@ -57,6 +58,36 @@ function withBase(html: string, url: string): string {
   if (/<html\b[^>]*>/i.test(html))
     return html.replace(/<html\b[^>]*>/i, (m) => `${m}<head>${base}</head>`);
   return `${base}${html}`;
+}
+
+/**
+ * Did the fetch end up somewhere that could still be the article?
+ *
+ * A publisher redirects for ordinary reasons — apex to `www`, a country or section
+ * host, a canonical path — and all of those stay inside its own domain. A redirect
+ * *out* of it is a different event: an SSO host, a consent broker, a login. What comes
+ * back then is a real page with a real 200, and it extracts perfectly into a paragraph
+ * that says "Inloggen".
+ *
+ * That is worse than a failure. A failure is visible; a login page stored as the
+ * article is a cached article that is wrong, and looks like the publisher's own text
+ * until someone reads it.
+ *
+ * `domainMatches` in both directions is the same RFC 6265 rule the cookie jar uses:
+ * `www.knack.be` and `knack.be` are related, `sso.roularta.be` and `www.knack.be` are
+ * not. Reusing it means the answer here and the answer about which cookies to send
+ * cannot drift apart.
+ */
+export function reachedSameSite(requested: string, final: string): boolean {
+  let a: string;
+  let b: string;
+  try {
+    a = new URL(requested).hostname;
+    b = new URL(final).hostname;
+  } catch {
+    return true; // Not a judgement we can make; do not invent a failure.
+  }
+  return domainMatches(a, b) || domainMatches(b, a);
 }
 
 export interface ExtractOptions extends GuardedFetchOptions {
@@ -146,6 +177,19 @@ export async function extract(url: string, options: ExtractOptions = {}): Promis
   if (response.status < 200 || response.status >= 300) {
     return { ok: false, url: response.url, tag: `HTTP ${response.status}`, authenticated };
   }
+  if (!reachedSameSite(url, response.url)) {
+    // Named, not generalised: which host it landed on is the whole diagnosis, and it
+    // is the difference between "this publisher wants a login" and "our session for
+    // it has lapsed".
+    let landed = response.url;
+    try {
+      landed = new URL(response.url).hostname;
+    } catch {
+      /* keep the whole URL if it will not parse */
+    }
+    return { ok: false, url: response.url, tag: tag(`Redirected to ${landed}`), authenticated };
+  }
+
   const reduced = extractFromHtml(response.body, response.url, authenticated);
   if (!reduced.ok) return reduced;
 

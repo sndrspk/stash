@@ -1053,7 +1053,82 @@ page — which is what a reader actually does — is what fires the event. Both 
 are now `networkMode: 'always'`, which is not a workaround but an accurate description of what they
 depend on: IndexedDB.
 
-### The honest User-Agent is the reason most extractions fail
+### A short extraction has two explanations, and the probe now tells them apart
+
+The signed-in probe against knack.be came back **HTTP 200, 183 KB of HTML, 332 characters
+extracted**, with the real title and byline and then a subscription pitch. The obvious
+reading is the ceiling `docs/EXTRACTION.md` describes: a page that builds its body with
+JavaScript, which no cookie reaches.
+
+It is not the only reading, and the difference matters because one of them is fixable.
+183 KB is a great deal of HTML for a page with no article in it. Readability scores
+markup and has no opinion whatsoever about a `<script>`, so an article sitting in a
+JSON-LD `articleBody` or a framework's hydration payload is *present in the file and
+invisible to the extractor* — and from the outside that looks exactly like an article
+that was never sent. Same status, same byte count, same tiny extraction.
+
+Three signs also said the session was working rather than failing: 183 KB against 13 KB
+anonymous, no redirect to the SSO host, and a real byline. So "the cookies did nothing"
+was not what the numbers showed either.
+
+`npm run probe -- <url> --raw page.html` settles it instead of arguing about it. One
+fetch, replaying a stored session when there is one, the bytes written out untouched, and
+a census of what is in them: `<p>` count, how much of the page is inline script, whether
+any `ld+json` block carries an `articleBody` and how long it is, and whether a recognised
+hydration payload (`__NEXT_DATA__`, streamed `self.__next_f`) is there. `--file` prints
+the same census, because a page saved from a browser is the other half of the same
+workflow — that is the path for an article the deployment cannot reach at all.
+
+It is deliberately its own mode rather than a flag on the normal run, which fetches twice:
+"which response did it save?" is not a question the output should leave open.
+
+The census counts signals, never publishers — `articleBody` is a schema.org field, not a
+site's markup, so a fix built on finding one works for every publisher that emits one and
+rots for none. Which is the point of running the instrument before writing the extractor:
+the last two rounds here were spent on a hypothesis stated more confidently than the
+evidence carried, and this one costs a single command to be right or wrong about.
+
+### The User-Agent was not the reason, and the probe said so in one command
+
+The section below was written from the code and from how bot protection is known to
+work, and it named the User-Agent as the reason most extractions returned 403. Setting
+`STASH_USER_AGENT` to a browser string on the deployment did not clear them: still 403 on
+some publishers, 405 on others, session sent.
+
+Running the probe against a real publisher from a laptop took one command and settled it:
+
+```
+anonymous   HTTP 200  raw 13 KB  extracted 1,069 chars  looks truncated
+            4 redirect(s) → https://sso.roularta.be/login
+            Inloggen. Vul hier je e-mailadres en wachtwoord in om aan te melden…
+```
+
+**200, not 403 — with the same browser User-Agent and no session at all.** So the
+User-Agent is not what those publishers object to, and the theory below was wrong. What
+knack.be actually does to an unauthenticated request is send it through four redirects to
+a single-sign-on host, which serves a perfectly ordinary sign-in page.
+
+Two things follow, and only the first is fixed here.
+
+**A 200 from another domain was being extracted as the article.** Readability reduced the
+sign-in page to a tidy paragraph reading "Inloggen", and but for the truncation heuristic
+catching it at 1,069 characters it would have been stored and rendered as the article
+text. A longer login page would have sailed through. `reachedSameSite` now ends the fetch
+when the final host is unrelated to the requested one — `www.knack.be` → `knack.be` is
+fine, `www.knack.be` → `sso.roularta.be` is not — reusing the cookie jar's own RFC 6265
+matching so the two cannot drift apart. A visible failure beats a cached article that is
+quietly wrong and reads like the publisher's own text.
+
+**Why the deployment says 403 where a laptop says 200 is still open.** The same URL, the
+same User-Agent, and a different answer. The remaining difference is where the request
+comes from: a serverless function in a datacentre against a residential connection, and
+datacentre address ranges are routinely refused by the same protection that lets a home
+address through. That is a hypothesis, and this time it stays labelled as one — the last
+one was stated with more confidence than the evidence carried and cost a deploy, a
+posture decision and two rounds to disprove. If it is right, no header changes it, and
+`docs/EXTRACTION.md`'s ceiling is where this stops.
+
+### The honest User-Agent is what this section originally blamed
 
 First use against real paywalled publishers returned **HTTP 403 on most of them**. Not a
 paywall stub, not an expired session — a refusal, before any cookie was read. Bot

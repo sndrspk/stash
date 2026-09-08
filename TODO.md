@@ -77,13 +77,30 @@ Both are the same root seen from two ends, which is why neither has been fixed p
 
 ## Waiting on you to try it
 
-- [ ] **Does `STASH_USER_AGENT` actually clear the 403s?** Most paywalled publishers refuse
-      `Stash/0.1 (+repo)` before reading a cookie, which is why Extract mostly fails. Set the
-      variable to a browser string, redeploy, and try one — the diagnosis is well-supported by
-      the code and the probe's own hint, but this container cannot reach a publisher to test it,
-      so it is a hypothesis until your deployment says otherwise. Read the posture section of
-      [`docs/EXTRACTION.md`](docs/EXTRACTION.md) first; it is a decision, not a setting.
-      → [WORKPLAN](WORKPLAN.md#the-honest-user-agent-is-the-reason-most-extractions-fail)
+- [ ] **Why does the deployment get 403 where a laptop gets 200?** The probe reaches
+      knack.be with a browser User-Agent and *no* session, gets 200, and is redirected to the
+      publisher's SSO login — so the User-Agent was never the barrier and the extraction path
+      works. The deployment, same URL, refuses.
+
+      The remaining difference is where the request comes from: a serverless function in a
+      datacentre versus a home connection, and datacentre ranges are routinely refused where a
+      residential address is not. **A hypothesis, not a diagnosis.**
+
+      Two ways to test it, both cheap. Add the session locally
+      (`npm run session -- add knack.be`) and re-probe: a full article proves the whole path
+      works from a laptop and isolates the difference to the deployment. Or fetch the same URL
+      from any cloud shell with the same User-Agent: a 403 there confirms it is the address.
+
+      If it is the address, no header fixes it, and the honest answer is the ceiling
+      `docs/EXTRACTION.md` already describes — with the origin link in the reading bar as the
+      fallback. → [WORKPLAN](WORKPLAN.md#the-user-agent-was-not-the-reason-and-the-probe-said-so-in-one-command)
+- [ ] **Is a short extraction a missing article, or one Readability could not see?** A 200 with
+      183 KB of HTML and 332 characters extracted has two explanations that look identical from
+      the outside, and only one of them is fixable. `npm run probe -- <url> --raw page.html`
+      now answers it: it saves the bytes the publisher sent and counts what is in them —
+      paragraphs, JSON-LD `articleBody`, hydration payload. A `articleBody` present but unused
+      is an extraction improvement worth making, and publisher-agnostic. Nothing there is the
+      ceiling. → [What this does not solve](docs/EXTRACTION.md#what-this-does-not-solve)
 
 ## Small and optional
 
