@@ -1640,6 +1640,30 @@ product decisions and two questions that first real use put on the table.
 
 ## Risks
 
+- **DNS rebinding against `resolve-image`, closed 2026-09-23.** The SSRF guard resolved and vetted
+  the host before the fetch, but the socket resolves again when it connects — and an
+  attacker-controlled nameserver can answer the two lookups differently: a public address for
+  the check, the cloud metadata endpoint for the connection. The comment in `fetch-guard.ts`
+  claimed rejecting on *any* resolved address closed this gap; it did not, because it only ever
+  saw the first answer set. The fix pins the vetting into the connection itself: `guardedFetch`
+  no longer uses `fetch` (Undici exposes no resolver hook) and instead connects through
+  `node:http(s).request` with `validatingLookup` as its `lookup` hook, which vets every address at
+  the moment it is handed to the socket. A rebound answer is refused there as a permanent
+  `BlockedUrlError`, so `resolve-image` caches the host as never-ask-again. The pre-check stays —
+  it is the readable refusal line — but it is now documentation rather than the boundary, and
+  its comment says so instead of claiming more than it guarantees. Driven by a stateful test
+  resolver that answers the pre-check cleanly and the connection hostile, and by a real fetch
+  through the new path (TLS, DNS and body read all verified against a real site).
+- **No Content-Security-Policy, fixed 2026-09-23.** DOMPurify at the injection point was the only
+  thing between third-party article HTML and script execution, which made a single sanitisation
+  bug the whole story. `vercel.json` now sets `default-src 'self'; script-src 'self'; style-src
+  'self'; img-src 'self' https:; object-src 'none'; frame-ancestors 'none'` on every response: no
+  inline script, no inline style, no third-party origins. The app was already shaped for it — no
+  inline handlers, styles in CSS modules, fonts and the manifest same-origin — so the policy cost
+  nothing and reads as a description of what the app already does. Article images may load from
+  any `https:` host, which is the one deliberate opening: they come from publishers' CDNs and
+  there is no host list to write. If a sanitisation bug ever lands, it now meets a second wall
+  that does not trust the first one's output.
 - **Instapaper remains the single point of failure.** The credentials are in hand, but the Full API
   is still a third-party dependency on a service that has changed hands more than once. Nothing to
   do about it beyond keeping the extraction path independent of Instapaper, which it is.
