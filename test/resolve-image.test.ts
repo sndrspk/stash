@@ -1,12 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { GET } from '../api/resolve-image';
+import type { IncomingMessage } from 'node:http';
+import { setHopRequestForTests } from '../src/lib/fetch-guard';
 import { SESSION_COOKIE, mintSession } from '../src/lib/session';
 
 const PASS = 'a long random deployment passphrase';
 
 let saved: string | undefined;
-const realFetch = globalThis.fetch;
 
 beforeEach(() => {
   saved = process.env.STASH_PASSPHRASE;
@@ -16,7 +17,7 @@ beforeEach(() => {
 afterEach(() => {
   if (saved === undefined) delete process.env.STASH_PASSPHRASE;
   else process.env.STASH_PASSPHRASE = saved;
-  globalThis.fetch = realFetch;
+  setHopRequestForTests(null);
   vi.restoreAllMocks();
 });
 
@@ -27,16 +28,41 @@ const ask = (target: string, withSession = true): Request =>
     headers: withSession ? { cookie: cookie() } : {},
   });
 
-/** Replaces the network, and records whether it was reached at all. */
-function stubFetch(body: string, init: ResponseInit = {}) {
-  const spy = vi.fn(() => Promise.resolve(new Response(body, { status: 200, ...init })));
-  globalThis.fetch = spy as unknown as typeof fetch;
+/*
+ * Replaces the network, and records whether it was reached at all.
+ *
+ * The seam is the hop, not `globalThis.fetch` — `guardedFetch` no longer goes through
+ * `fetch` (Undici exposes no resolver hook to vet the address at connect time), so a
+ * `fetch` stub would silently stop being the thing the code calls. That is the trap
+ * this file exists to avoid: a suite that agrees with itself while the feature is
+ * broken. The stub answers at exactly the boundary the code crosses, and never opens
+ * a socket.
+ */
+function stubHop(respond: (url: URL) => { status: number; body?: string; location?: string }) {
+  const spy = vi.fn((url: URL) => {
+    const answer = respond(url);
+    const message = {
+      statusCode: answer.status,
+      headers: answer.location !== undefined ? { location: answer.location } : {},
+      [Symbol.asyncIterator]: async function* () {
+        yield Buffer.from(answer.body ?? '');
+      },
+      destroy: () => {},
+    };
+    return Promise.resolve(message as unknown as IncomingMessage);
+  });
+  setHopRequestForTests(spy as never);
   return spy;
+}
+
+/** The ordinary case: a page, and whatever body it came with. */
+function stubPage(body: string, status = 200) {
+  return stubHop(() => ({ status, body }));
 }
 
 describe('the gate', () => {
   it('refuses an unauthenticated request without fetching anything', async () => {
-    const spy = stubFetch('<html></html>');
+    const spy = stubPage('<html></html>');
     const response = await GET(ask('https://1.1.1.1/story', false));
 
     expect(response.status).toBe(401);
@@ -60,7 +86,7 @@ describe('the SSRF guard', () => {
     ['http://10.0.0.1/', 'a private address'],
     ['http://[::1]/', 'IPv6 loopback'],
   ])('refuses %s (%s) before any fetch', async (target) => {
-    const spy = stubFetch('<html></html>');
+    const spy = stubPage('<html></html>');
     const response = await GET(ask(target));
 
     expect(response.status).toBe(403);
@@ -69,13 +95,13 @@ describe('the SSRF guard', () => {
   });
 
   it('refuses a non-http scheme', async () => {
-    const spy = stubFetch('<html></html>');
+    const spy = stubPage('<html></html>');
     expect((await GET(ask('file:///etc/passwd'))).status).toBe(403);
     expect(spy).not.toHaveBeenCalled();
   });
 
   it('refuses instapaper.com outright, as the terms require', async () => {
-    const spy = stubFetch('<html></html>');
+    const spy = stubPage('<html></html>');
     expect((await GET(ask('https://www.instapaper.com/read/123'))).status).toBe(403);
     expect(spy).not.toHaveBeenCalled();
   });
@@ -96,7 +122,7 @@ describe('bad requests', () => {
 
 describe('resolving', () => {
   it('returns the declared image', async () => {
-    stubFetch(
+    stubPage(
       '<html><head><meta property="og:image" content="https://cdn.example/a.jpg"></head></html>',
     );
     const response = await GET(ask('https://1.1.1.1/story'));
@@ -110,7 +136,7 @@ describe('resolving', () => {
   });
 
   it('answers none — a real, cacheable result — for a page with no image', async () => {
-    stubFetch('<html><body><p>Words.</p></body></html>');
+    stubPage('<html><body><p>Words.</p></body></html>');
     const response = await GET(ask('https://1.1.1.1/story'));
 
     expect(response.status).toBe(200);
@@ -118,7 +144,7 @@ describe('resolving', () => {
   });
 
   it('resolves a relative image against the URL actually fetched', async () => {
-    stubFetch('<html><head><meta property="og:image" content="/img/a.jpg"></head></html>');
+    stubPage('<html><head><meta property="og:image" content="/img/a.jpg"></head></html>');
     const body = (await (await GET(ask('https://1.1.1.1/news/story'))).json()) as {
       image_url: string;
     };
@@ -128,7 +154,7 @@ describe('resolving', () => {
   it('reports a publisher error as retryable rather than as "no image"', async () => {
     // The failure worth designing against: a 403 cached as `none` is silent and it
     // lasts, so it must not be a 200.
-    stubFetch('nope', { status: 403 });
+    stubPage('nope', 403);
     const response = await GET(ask('https://1.1.1.1/story'));
 
     expect(response.status).toBe(502);
@@ -136,18 +162,18 @@ describe('resolving', () => {
   });
 
   it('reports an unreachable host as retryable', async () => {
-    globalThis.fetch = vi.fn(() =>
-      Promise.reject(new TypeError('fetch failed')),
-    ) as unknown as typeof fetch;
+    stubHop(() => {
+      throw new TypeError('fetch failed');
+    });
     expect((await GET(ask('https://1.1.1.1/story'))).status).toBe(502);
   });
 
   it('reports a timeout as 504, not as a refusal', async () => {
-    globalThis.fetch = vi.fn(() => {
+    stubHop(() => {
       const error = new Error('The operation was aborted due to timeout');
       error.name = 'TimeoutError';
-      return Promise.reject(error);
-    }) as unknown as typeof fetch;
+      throw error;
+    });
 
     expect((await GET(ask('https://1.1.1.1/story'))).status).toBe(504);
   });
@@ -155,16 +181,12 @@ describe('resolving', () => {
 
 describe('redirects', () => {
   it('re-validates every hop, so a permitted URL cannot bounce into private space', async () => {
-    const spy = vi.fn((input: string | URL) => {
-      const url = String(input);
-      if (url.startsWith('https://1.1.1.1/')) {
-        return Promise.resolve(
-          new Response(null, { status: 302, headers: { location: 'http://169.254.169.254/' } }),
-        );
+    const spy = stubHop((url) => {
+      if (url.hostname === '1.1.1.1') {
+        return { status: 302, location: 'http://169.254.169.254/' };
       }
-      throw new Error(`should never be fetched: ${url}`);
+      throw new Error(`should never be fetched: ${url.toString()}`);
     });
-    globalThis.fetch = spy as unknown as typeof fetch;
 
     const response = await GET(ask('https://1.1.1.1/story'));
 

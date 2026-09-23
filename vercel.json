@@ -18,7 +18,11 @@
       "headers": [
         { "key": "x-content-type-options", "value": "nosniff" },
         { "key": "referrer-policy", "value": "strict-origin-when-cross-origin" },
-        { "key": "x-frame-options", "value": "DENY" }
+        { "key": "x-frame-options", "value": "DENY" },
+        {
+          "key": "content-security-policy",
+          "value": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https:; font-src 'self'; connect-src 'self'; manifest-src 'self'; media-src 'none'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; worker-src 'self'"
+        }
       ]
     }
   ]

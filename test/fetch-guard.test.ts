@@ -1,10 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import {
   BlockedUrlError,
   USER_AGENT,
   addressBlocked,
   assertFetchable,
+  guardedFetch,
   isInstapaperHost,
+  setDnsResolverForTests,
+  validatingLookup,
 } from '../src/lib/fetch-guard.js';
 
 describe('addressBlocked', () => {
@@ -137,5 +140,116 @@ describe('USER_AGENT', () => {
   it('says what the app is, and links to it', () => {
     expect(USER_AGENT).toContain('Stash/');
     expect(USER_AGENT).toContain('github.com');
+  });
+});
+
+/*
+ * DNS rebinding: the nameserver answers the pre-check with a public address and the
+ * connection with a blocked one. This is the scenario `validatingLookup` exists for —
+ * the pre-check alone waves it through, because each lookup it made was individually
+ * clean at the moment it was made.
+ *
+ * The stateful resolver below makes the scenario deterministic: the first call is the
+ * pre-check's, the second is the connection's. And the refusal is asserted never to
+ * have opened a socket — it happens inside the connection's `lookup` hook, which
+ * Node calls before connecting, so a refusal that happened after would be too late
+ * to be worth anything.
+ */
+describe('DNS rebinding', () => {
+  afterEach(() => {
+    setDnsResolverForTests(null);
+  });
+
+  it('refuses at connect time when the resolver rebinds to a blocked address', async () => {
+    const answers = [
+      { address: '93.184.216.34', family: 4 }, // public: passes the pre-check
+      { address: '169.254.169.254', family: 4 }, // metadata: refused at the socket
+    ];
+    let calls = 0;
+    setDnsResolverForTests(async () => [answers[calls++ % answers.length]!]);
+    await expect(guardedFetch('http://rebinding.attacker.test/latest/meta-data/')).rejects.toThrow(
+      /rebound to blocked address/,
+    );
+  });
+
+  it('keeps the rebinding refusal permanent, so a client caches it rather than retrying', async () => {
+    // The same scenario, asserted on the type rather than the message: the hook must
+    // refuse with a BlockedUrlError (permanent by default), because `resolve-image`
+    // caches a permanent refusal as "never ask again" — and a rebinding host is
+    // exactly the host never worth asking twice.
+    const answers = [
+      { address: '93.184.216.34', family: 4 },
+      { address: '10.0.0.1', family: 4 },
+    ];
+    let calls = 0;
+    setDnsResolverForTests(async () => [answers[calls++ % answers.length]!]);
+    await expect(guardedFetch('http://rebinding.attacker.test/')).rejects.toBeInstanceOf(
+      BlockedUrlError,
+    );
+  });
+
+  it('refuses, before any socket exists, when only some answers are clean', async () => {
+    // The all-answers veto at connect time: one clean answer and one hostile one is
+    // still a hostile host, whichever address the connect loop would have reached.
+    setDnsResolverForTests(async () => [
+      { address: '93.184.216.34', family: 4 },
+      { address: '10.0.0.1', family: 4 },
+    ]);
+    await expect(guardedFetch('http://mixed.attacker.test/latest/meta-data/')).rejects.toThrow(
+      BlockedUrlError,
+    );
+  });
+});
+
+describe('validatingLookup', () => {
+  afterEach(() => {
+    setDnsResolverForTests(null);
+  });
+
+  it('hands clean answers to Node unchanged, one call for the whole set', async () => {
+    const answers = [
+      { address: '93.184.216.34', family: 4 },
+      { address: '2606:4700:10::6814:179a', family: 6 },
+    ];
+    setDnsResolverForTests(async () => answers);
+    await new Promise<void>((resolve, reject) => {
+      validatingLookup('clean.example.test', { all: true }, (err, address) => {
+        if (err !== null) {
+          reject(err);
+          return;
+        }
+        expect(address).toEqual(answers);
+        resolve();
+      });
+    });
+  });
+
+  it('refuses a blocked answer as a permanent error, before the socket exists', async () => {
+    setDnsResolverForTests(async () => [{ address: '169.254.169.254', family: 4 }]);
+    await new Promise<void>((resolve, reject) => {
+      validatingLookup('metadata.attacker.test', { all: true }, (err) => {
+        expect(err).toBeInstanceOf(BlockedUrlError);
+        if (!(err instanceof BlockedUrlError)) {
+          reject(err);
+          return;
+        }
+        expect(err.permanent).toBe(true);
+        resolve();
+      });
+    });
+  });
+
+  it('refuses an empty answer set rather than letting Node connect nowhere', async () => {
+    setDnsResolverForTests(async () => []);
+    await new Promise<void>((resolve, reject) => {
+      validatingLookup('empty.attacker.test', { all: true }, (err) => {
+        expect(err).toBeInstanceOf(BlockedUrlError);
+        if (!(err instanceof BlockedUrlError)) {
+          reject(err);
+          return;
+        }
+        resolve();
+      });
+    });
   });
 });
