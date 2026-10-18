@@ -173,6 +173,12 @@ near-identical to Vercel. Nothing outside Phase 1 and Phase 8 depends on the cho
       **self-hosted** — latin subset, variable weight 400–700, refreshed by
       `npm run fonts`. The reading-column presets (22/34/56em) live here as tokens so Phase 6 has
       one home for `--reading-column-width`.
+- [x] Per-face reading weights: Readex Pro's 400 sets visibly heavier than the other
+      faces (large x-height, low contrast), so it reads at 350 with bold at 600 —
+      its variable axis runs 160..700, so both are real weights — while the other
+      five stay at 400/700. The weights travel with the face via
+      `--reading-font-weight` / `--reading-font-weight-bold`, so `<strong>` never
+      falls back to the browser's default bolder-of-the-two and undoes the choice.
 - [x] Vercel project config (`vercel.json`, reasoning in [`docs/VERCEL.md`](docs/VERCEL.md)) and a
       stub `api/health` function.
 - [x] CI: GitHub Actions running lint, format, typecheck, tests and build on push and PR.
