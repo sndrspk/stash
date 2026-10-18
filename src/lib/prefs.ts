@@ -14,17 +14,50 @@
  * leave the reader with an unreadable column and no way back.
  */
 
+/**
+ * The weights the reading view asks for, per face. `body` is the article text,
+ * `bold` is what `<strong>` gets — the two move together, because a bold that is
+ * one notch heavier than its face wants reads as heavier than the other faces'
+ * bold, and the menu samples the face at `body`.
+ *
+ * Readex Pro is the outlier: its 400 is visibly heavier than the others' (large
+ * x-height, low contrast), so it reads at 350 — its variable axis runs 160..700,
+ * so that is a real weight, not a clamped one — and its bold at 600 to match.
+ */
+const DEFAULT_WEIGHTS = { body: 400, bold: 700 } as const;
+
 /** The curated list from the spec, all six self-hosted, alphabetical. */
 export const FONTS = {
-  crimson: { label: 'Crimson Pro', stack: "'Crimson Pro', Georgia, serif" },
-  geist: { label: 'Geist', stack: "'Geist', ui-sans-serif, system-ui, sans-serif" },
-  newsreader: { label: 'Newsreader', stack: "'Newsreader', Georgia, serif" },
-  piazzolla: { label: 'Piazzolla', stack: "'Piazzolla', Georgia, serif" },
+  crimson: {
+    label: 'Crimson Pro',
+    stack: "'Crimson Pro', Georgia, serif",
+    weights: DEFAULT_WEIGHTS,
+  },
+  geist: {
+    label: 'Geist',
+    stack: "'Geist', ui-sans-serif, system-ui, sans-serif",
+    weights: DEFAULT_WEIGHTS,
+  },
+  newsreader: {
+    label: 'Newsreader',
+    stack: "'Newsreader', Georgia, serif",
+    weights: DEFAULT_WEIGHTS,
+  },
+  piazzolla: {
+    label: 'Piazzolla',
+    stack: "'Piazzolla', Georgia, serif",
+    weights: DEFAULT_WEIGHTS,
+  },
   'readex-pro': {
     label: 'Readex Pro',
     stack: "'Readex Pro', ui-sans-serif, system-ui, sans-serif",
+    weights: { body: 350, bold: 600 },
   },
-  'source-serif': { label: 'Source Serif', stack: "'Source Serif 4', Georgia, serif" },
+  'source-serif': {
+    label: 'Source Serif',
+    stack: "'Source Serif 4', Georgia, serif",
+    weights: DEFAULT_WEIGHTS,
+  },
 } as const;
 
 export type FontId = keyof typeof FONTS;
@@ -214,6 +247,8 @@ export function normalizePrefs(stored: unknown): ReadingPrefs {
 export function prefsToCss(prefs: ReadingPrefs): Record<string, string> {
   return {
     '--reading-font': FONTS[prefs.font].stack,
+    '--reading-font-weight': String(FONTS[prefs.font].weights.body),
+    '--reading-font-weight-bold': String(FONTS[prefs.font].weights.bold),
     '--reading-font-size': `${prefs.fontSize}rem`,
     '--reading-line-height': String(prefs.lineHeight),
     '--reading-column-width': `${COLUMN_WIDTHS[prefs.columnWidth].em}em`,

@@ -228,10 +228,20 @@
   column-gap: var(--space-12);
   column-fill: auto;
   font-family: var(--reading-font);
+  font-weight: var(--reading-font-weight);
   font-size: var(--reading-font-size);
   line-height: var(--reading-line-height);
   color: var(--ink);
   hyphens: auto;
+}
+
+/*
+ * Bold, per face. Set on the article's own weight so a face whose bold sits one
+ * notch lighter than 700 (Readex Pro's 600) does not get the browser's default
+ * bolder-of-the-two, which would put it right back at 700.
+ */
+.article :is(strong, b) {
+  font-weight: var(--reading-font-weight-bold);
 }
 
 @media (max-width: 40rem) {

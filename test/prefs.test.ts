@@ -244,4 +244,14 @@ describe('prefsToCss', () => {
     expect(css['--reading-font-size']).toMatch(/^[\d.]+rem$/);
     expect(css['--reading-line-height']).toMatch(/^[\d.]+$/);
   });
+  it('scales the weights with the face', () => {
+    // Readex Pro's 400 is heavier than the other faces' — it reads at 350, and
+    // its bold moves down a notch with it so the contrast is the same.
+    const readex = prefsToCss({ ...DEFAULT_PREFS, font: 'readex-pro' });
+    expect(readex['--reading-font-weight']).toBe('350');
+    expect(readex['--reading-font-weight-bold']).toBe('600');
+    const crimson = prefsToCss({ ...DEFAULT_PREFS, font: 'crimson' });
+    expect(crimson['--reading-font-weight']).toBe('400');
+    expect(crimson['--reading-font-weight-bold']).toBe('700');
+  });
 });
