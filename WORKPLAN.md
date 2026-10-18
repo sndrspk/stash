@@ -174,7 +174,7 @@ near-identical to Vercel. Nothing outside Phase 1 and Phase 8 depends on the cho
       `npm run fonts`. The reading-column presets (22/34/56em) live here as tokens so Phase 6 has
       one home for `--reading-column-width`.
 - [x] Per-face reading weights: Readex Pro's 400 sets visibly heavier than the other
-      faces (large x-height, low contrast), so it reads at 350 with bold at 600 —
+      faces (large x-height, low contrast), so it reads at 300 with bold at 600 —
       its variable axis runs 160..700, so both are real weights — while the other
       five stay at 400/700. The weights travel with the face via
       `--reading-font-weight` / `--reading-font-weight-bold`, so `<strong>` never

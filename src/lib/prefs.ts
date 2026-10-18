@@ -21,8 +21,9 @@
  * bold, and the menu samples the face at `body`.
  *
  * Readex Pro is the outlier: its 400 is visibly heavier than the others' (large
- * x-height, low contrast), so it reads at 350 — its variable axis runs 160..700,
- * so that is a real weight, not a clamped one — and its bold at 600 to match.
+ * x-height, low contrast), so it reads at 300 — its variable axis runs 160..700,
+ * so that is a real weight, not a clamped one. Its bold stays at 600: the gap to
+ * 300 is what gives the bold its contrast.
  */
 const DEFAULT_WEIGHTS = { body: 400, bold: 700 } as const;
 
@@ -51,7 +52,7 @@ export const FONTS = {
   'readex-pro': {
     label: 'Readex Pro',
     stack: "'Readex Pro', ui-sans-serif, system-ui, sans-serif",
-    weights: { body: 350, bold: 600 },
+    weights: { body: 300, bold: 600 },
   },
   'source-serif': {
     label: 'Source Serif',
