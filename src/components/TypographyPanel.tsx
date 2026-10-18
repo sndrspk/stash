@@ -98,8 +98,8 @@ export function TypographyPanel({ prefs, mode, onChange, onClose }: TypographyPa
 
       <fieldset className={styles.group}>
         <legend className={styles.legend}>Typeface</legend>
-        {/* Two by two, not three and a stray one: four names of uneven length wrap
-            raggedly in a flex row, and a grid makes the set read as a set. */}
+        {/* A grid rather than a flex row: names of uneven length wrap raggedly, and
+            a grid makes the set read as a set. */}
         <div className={styles.faces}>
           {(Object.keys(FONTS) as FontId[]).map((id) => (
             <button

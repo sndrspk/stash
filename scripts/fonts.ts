@@ -1,12 +1,12 @@
 /**
- * Pulls the latin-subset woff2 for the four reading faces into `public/fonts/`.
+ * Pulls the latin-subset woff2 for the six reading faces into `public/fonts/`.
  *
  * The files are committed — a build must not depend on Google being reachable — so
  * this only needs re-running to pick up an upstream revision or to add a family.
  * Run with `npm run fonts`, then check the diff: a changed file is a new font
  * version, and worth a glance at the rendered result before committing.
  *
- * All four are OFL-licensed; see public/fonts/LICENSE.md.
+ * All six are OFL-licensed; see public/fonts/LICENSE.md.
  */
 import { mkdir, writeFile } from 'node:fs/promises';
 
@@ -19,8 +19,13 @@ const FAMILIES = [
     spec: 'Source+Serif+4:ital,opsz,wght@0,8..60,400..700;1,8..60,400..700',
   },
   { slug: 'crimson-pro', spec: 'Crimson+Pro:ital,wght@0,400..700;1,400..700' },
-  { slug: 'piazzolla', spec: 'Piazzolla:ital,wght@0,400..700;1,400..700' },
   { slug: 'geist', spec: 'Geist:wght@400..700' },
+  {
+    slug: 'newsreader',
+    spec: 'Newsreader:ital,opsz,wght@0,6..72,400..700;1,6..72,400..700',
+  },
+  { slug: 'piazzolla', spec: 'Piazzolla:ital,wght@0,400..700;1,400..700' },
+  { slug: 'readex-pro', spec: 'Readex+Pro:wght@400..700' },
 ];
 
 // The latin subset is the block whose unicode-range opens at U+0000-00FF. The CSS

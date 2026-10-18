@@ -29,8 +29,15 @@ describe('the presets', () => {
     expect(DEFAULT_PREFS.columnWidth).toBe('medium');
   });
 
-  it('offers the spec’s four faces', () => {
-    expect(Object.keys(FONTS).sort()).toEqual(['crimson', 'geist', 'piazzolla', 'source-serif']);
+  it('offers the spec’s six faces', () => {
+    expect(Object.keys(FONTS).sort()).toEqual([
+      'crimson',
+      'geist',
+      'newsreader',
+      'piazzolla',
+      'readex-pro',
+      'source-serif',
+    ]);
   });
 });
 
