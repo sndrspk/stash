@@ -14,12 +14,17 @@
  * leave the reader with an unreadable column and no way back.
  */
 
-/** The curated list from the spec, all four self-hosted. */
+/** The curated list from the spec, all six self-hosted, alphabetical. */
 export const FONTS = {
-  'source-serif': { label: 'Source Serif', stack: "'Source Serif 4', Georgia, serif" },
   crimson: { label: 'Crimson Pro', stack: "'Crimson Pro', Georgia, serif" },
-  piazzolla: { label: 'Piazzolla', stack: "'Piazzolla', Georgia, serif" },
   geist: { label: 'Geist', stack: "'Geist', ui-sans-serif, system-ui, sans-serif" },
+  newsreader: { label: 'Newsreader', stack: "'Newsreader', Georgia, serif" },
+  piazzolla: { label: 'Piazzolla', stack: "'Piazzolla', Georgia, serif" },
+  'readex-pro': {
+    label: 'Readex Pro',
+    stack: "'Readex Pro', ui-sans-serif, system-ui, sans-serif",
+  },
+  'source-serif': { label: 'Source Serif', stack: "'Source Serif 4', Georgia, serif" },
 } as const;
 
 export type FontId = keyof typeof FONTS;

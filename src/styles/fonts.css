@@ -3,7 +3,7 @@
  * the work plan: an installed PWA has to render offline in the reader's chosen face,
  * and a third-party request per page load is a request we don't need to make.
  *
- * All four are variable fonts, latin subset, weight axis 400..700 — one file covers
+ * All six are variable fonts, latin subset, weight axis 400..700 — one file covers
  * every weight the reading view offers. Refresh them with scripts/fonts.ts.
  *
  * `swap` on the reading faces: text appears immediately in the fallback and reflows
@@ -64,4 +64,28 @@
   font-weight: 400 700;
   font-display: swap;
   src: url('/fonts/piazzolla-italic-latin.woff2') format('woff2-variations');
+}
+
+@font-face {
+  font-family: 'Newsreader';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('/fonts/newsreader-latin.woff2') format('woff2-variations');
+}
+
+@font-face {
+  font-family: 'Newsreader';
+  font-style: italic;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('/fonts/newsreader-italic-latin.woff2') format('woff2-variations');
+}
+
+@font-face {
+  font-family: 'Readex Pro';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('/fonts/readex-pro-latin.woff2') format('woff2-variations');
 }
