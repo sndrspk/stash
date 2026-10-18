@@ -245,10 +245,10 @@ describe('prefsToCss', () => {
     expect(css['--reading-line-height']).toMatch(/^[\d.]+$/);
   });
   it('scales the weights with the face', () => {
-    // Readex Pro's 400 is heavier than the other faces' — it reads at 350, and
-    // its bold moves down a notch with it so the contrast is the same.
+    // Readex Pro's 400 is heavier than the other faces' — it reads at 300; its
+    // bold stays at 600, where the gap is what gives the bold its contrast.
     const readex = prefsToCss({ ...DEFAULT_PREFS, font: 'readex-pro' });
-    expect(readex['--reading-font-weight']).toBe('350');
+    expect(readex['--reading-font-weight']).toBe('300');
     expect(readex['--reading-font-weight-bold']).toBe('600');
     const crimson = prefsToCss({ ...DEFAULT_PREFS, font: 'crimson' });
     expect(crimson['--reading-font-weight']).toBe('400');
